@@ -1,0 +1,351 @@
+from __future__ import annotations
+
+import csv
+import io
+import json
+import shutil
+import threading
+import uuid
+from collections import defaultdict
+import fnmatch
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Dict, List, Optional
+
+from fastapi import HTTPException, status
+
+from .cache import FileHashCache
+from .config import AppConfig
+from .models import (
+    DeletionPlan,
+    DeletionPlanPayload,
+    DeletionResult,
+    ExportFilters,
+    ExportHeader,
+    FolderLabel,
+    GroupRecord,
+    ScanProgress,
+    ScanRequest,
+    ScanStatus,
+    WarningRecord,
+    WarningType,
+)
+from .scanner import FolderScanner, ScanResult, compute_similarity_groups, group_to_record
+
+
+class ScanJob:
+    def __init__(self, scan_id: str, request: ScanRequest) -> None:
+        self.scan_id = scan_id
+        self.request = request
+        self.status = ScanStatus.PENDING
+        self.started_at = datetime.now(timezone.utc)
+        self.completed_at: Optional[datetime] = None
+        self.warnings: List[WarningRecord] = []
+        self.stats: Dict[str, int] = {}
+        self.result: Optional[ScanResult] = None
+        self.groups: Dict[FolderLabel, List[GroupRecord]] = defaultdict(list)
+        self.error: Optional[str] = None
+
+
+class ScanManager:
+    def __init__(self, app_config: AppConfig, executor_workers: int = 4) -> None:
+        self.config = app_config
+        cache_path = (
+            app_config.cache_db_path
+            if app_config.cache_db_path
+            else app_config.config_path / "cache.db"
+        )
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        self.file_cache = FileHashCache(cache_path)
+        self._jobs: Dict[str, ScanJob] = {}
+        self._plans: Dict[str, DeletionPlan] = {}
+        self._lock = threading.RLock()
+        self._executor = ThreadPoolExecutorWithStop(max_workers=executor_workers)
+
+    def start_scan(self, request: ScanRequest) -> ScanJob:
+        scan_id = uuid.uuid4().hex[:12]
+        job = ScanJob(scan_id, request)
+        with self._lock:
+            self._jobs[scan_id] = job
+        self._executor.submit(self._run_scan, job)
+        return job
+
+    def shutdown(self) -> None:
+        self._executor.shutdown()
+
+    def list_jobs(self) -> List[ScanJob]:
+        with self._lock:
+            return list(self._jobs.values())
+
+    def get_job(self, scan_id: str) -> ScanJob:
+        with self._lock:
+            if scan_id not in self._jobs:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scan not found")
+            return self._jobs[scan_id]
+
+    def get_progress(self, scan_id: str) -> ScanProgress:
+        job = self.get_job(scan_id)
+        return ScanProgress(
+            scan_id=job.scan_id,
+            status=job.status,
+            started_at=job.started_at,
+            completed_at=job.completed_at,
+            warnings=job.warnings,
+            root_path=job.request.root_path,
+            stats=job.stats,
+        )
+
+    def get_groups(self, scan_id: str, label: Optional[FolderLabel] = None) -> List[GroupRecord]:
+        job = self.get_job(scan_id)
+        if job.status != ScanStatus.COMPLETED:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Scan is not complete")
+        if label:
+            return job.groups.get(label, [])
+        groups: List[GroupRecord] = []
+        for records in job.groups.values():
+            groups.extend(records)
+        return groups
+
+    def create_deletion_plan(self, scan_id: str, payload: DeletionPlanPayload) -> DeletionPlan:
+        job = self.get_job(scan_id)
+        if not job.request.deletion_enabled:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Deletion is disabled")
+
+        root = job.request.root_path
+        plan_paths: List[str] = []
+        total_bytes = 0
+        for rel_path in payload.paths:
+            abs_path = (root / rel_path).resolve()
+            if root not in abs_path.parents and abs_path != root:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Path escapes root: {rel_path}")
+            if not abs_path.exists():
+                continue
+            size = _compute_path_size(abs_path)
+            total_bytes += size
+            plan_paths.append(abs_path.relative_to(root).as_posix())
+
+        plan_id = uuid.uuid4().hex[:12]
+        token = uuid.uuid4().hex
+        quarant_root = root / ".folderdupe_quarantine" / datetime.now(timezone.utc).strftime("%Y%m%d")
+        plan = DeletionPlan(
+            plan_id=plan_id,
+            token=token,
+            reclaimable_bytes=total_bytes,
+            queue=plan_paths,
+            root=root,
+            quarantine_root=quarant_root,
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        )
+        with self._lock:
+            self._plans[plan_id] = plan
+        return plan
+
+    def execute_plan(self, plan_id: str, token: str) -> DeletionResult:
+        with self._lock:
+            if plan_id not in self._plans:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
+            plan = self._plans[plan_id]
+        if token != plan.token:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid confirmation token")
+        if datetime.now(timezone.utc) > plan.expires_at:
+            raise HTTPException(status_code=status.HTTP_410_GONE, detail="Plan expired")
+
+        moved = 0
+        bytes_moved = 0
+        plan.quarantine_root.mkdir(parents=True, exist_ok=True)
+        root = plan.root
+        for rel_path in plan.queue:
+            source = (root / rel_path).resolve()
+            if not source.exists():
+                continue
+            if root not in source.parents and source != root:
+                continue
+            target = plan.quarantine_root / rel_path
+            if target.exists():
+                target = plan.quarantine_root / f"{target.name}_{uuid.uuid4().hex[:6]}"
+            try:
+                bytes_moved += _move_to_quarantine(source, target)
+                moved += 1
+            except OSError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to move {source}: {exc}",
+                )
+
+        with self._lock:
+            self._plans.pop(plan_id, None)
+
+        return DeletionResult(
+            plan_id=plan_id,
+            moved_count=moved,
+            bytes_moved=bytes_moved,
+            quarantine_root=plan.quarantine_root,
+            root=plan.root,
+        )
+
+    def export(
+        self,
+        scan_id: str,
+        fmt: str,
+        filters: Optional[ExportFilters] = None,
+    ) -> bytes:
+        job = self.get_job(scan_id)
+        if job.status != ScanStatus.COMPLETED:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Scan is not complete")
+        filters = filters or ExportFilters()
+        header = ExportHeader(
+            generated_at=datetime.now(timezone.utc),
+            root=job.request.root_path,
+            file_equality=job.request.file_equality,
+            min_similarity=job.request.similarity_threshold,
+            structure_policy=job.request.structure_policy,
+            filters=filters,
+        )
+        groups = self.get_groups(scan_id)
+        groups = _apply_filters(groups, filters)
+        if fmt == "json":
+            payload = {
+                "header": json.loads(header.json()),
+                "groups": [json.loads(group.json()) for group in groups],
+            }
+            return json.dumps(payload, indent=2).encode("utf-8")
+        if fmt == "csv":
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(
+                [
+                    "group_id",
+                    "label",
+                    "canonical_path",
+                    "member_path",
+                    "total_bytes",
+                    "file_count",
+                    "unstable",
+                ]
+            )
+            for group in groups:
+                for member in group.members:
+                    writer.writerow(
+                        [
+                            group.group_id,
+                            group.label.value,
+                            str(group.canonical_path),
+                            str(member.path),
+                            member.total_bytes,
+                            member.file_count,
+                            member.unstable,
+                        ]
+                    )
+            return output.getvalue().encode("utf-8")
+        if fmt == "md":
+            lines = [
+                f"# Duplicate Report — {header.generated_at.isoformat()}",
+                "",
+                f"- Root: `{header.root}`",
+                f"- File equality: `{header.file_equality.value}`",
+                f"- Min similarity: `{header.min_similarity:.2f}`",
+                "",
+            ]
+            for group in groups:
+                lines.append(f"## {group.group_id} — {group.label.value}")
+                lines.append(f"- Canonical: `{group.canonical_path}`")
+                lines.append("")
+                for member in group.members:
+                    lines.append(
+                        f"  - `{member.path}` — bytes: {member.total_bytes:,}, files: {member.file_count}"
+                    )
+                lines.append("")
+            return "\n".join(lines).encode("utf-8")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown export format")
+
+    def _run_scan(self, job: ScanJob) -> None:
+        job.status = ScanStatus.RUNNING
+        try:
+            scanner = FolderScanner(job.request, cache=self.file_cache)
+            result = scanner.scan()
+            similarity_groups = compute_similarity_groups(result.fingerprints, job.request.similarity_threshold)
+
+            for label in FolderLabel:
+                job.groups[label] = []
+
+            for group in similarity_groups:
+                group_id, members, pairs, divergences = group_to_record(
+                    group,
+                    FolderLabel.NEAR_DUPLICATE if group.max_similarity < 1.0 else FolderLabel.IDENTICAL,
+                    result.fingerprints,
+                )
+                record = GroupRecord(
+                    group_id=group_id,
+                    label=FolderLabel.NEAR_DUPLICATE if group.max_similarity < 1.0 else FolderLabel.IDENTICAL,
+                    canonical_path=members[0].path,
+                    members=members,
+                    pairwise_similarity=pairs,
+                    divergences=divergences,
+                    suppressed_descendants=False,
+                )
+                job.groups[record.label].append(record)
+
+            job.result = result
+            job.warnings = result.warnings
+            job.stats = result.stats
+            job.status = ScanStatus.COMPLETED
+            job.completed_at = datetime.now(timezone.utc)
+        except Exception as exc:  # pylint: disable=broad-except
+            job.status = ScanStatus.FAILED
+            job.completed_at = datetime.now(timezone.utc)
+            job.error = str(exc)
+            job.warnings.append(
+                WarningRecord(
+                    path=job.request.root_path,
+                    type=WarningType.IO_ERROR,
+                    message=str(exc),
+                )
+            )
+
+
+class ThreadPoolExecutorWithStop:
+    def __init__(self, max_workers: int) -> None:
+        from concurrent.futures import ThreadPoolExecutor
+
+        self._executor = ThreadPoolExecutor(max_workers=max_workers)
+
+    def submit(self, fn, *args, **kwargs):
+        return self._executor.submit(fn, *args, **kwargs)
+
+    def shutdown(self, wait: bool = True) -> None:
+        self._executor.shutdown(wait=wait)
+
+
+def _move_to_quarantine(source: Path, target: Path) -> int:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if source.is_dir():
+        shutil.move(str(source), str(target))
+        return sum(f.stat().st_size for f in target.rglob("*") if f.is_file())
+    shutil.move(str(source), str(target))
+    return target.stat().st_size
+
+
+def _compute_path_size(path: Path) -> int:
+    if path.is_dir():
+        return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+    if path.is_file():
+        return path.stat().st_size
+    return 0
+
+
+def _apply_filters(groups: List[GroupRecord], filters: ExportFilters) -> List[GroupRecord]:
+    if not filters.include and not filters.exclude:
+        return groups
+
+    def match(path_str: str, patterns: List[str]) -> bool:
+        return any(fnmatch.fnmatch(path_str, pattern) for pattern in patterns)
+
+    filtered: List[GroupRecord] = []
+    for group in groups:
+        canonical = str(group.canonical_path)
+        if filters.include and not match(canonical, filters.include):
+            continue
+        if filters.exclude and match(canonical, filters.exclude):
+            continue
+        filtered.append(group)
+    return filtered

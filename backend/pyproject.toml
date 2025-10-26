@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=67", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xfolder-backend"
+version = "0.1.0"
+description = "Folder similarity scanner backend per PRD"
+readme = "../docs/prd.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic>=1.10,<3.0",
+]
+
