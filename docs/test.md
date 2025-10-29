@@ -12,7 +12,7 @@ This document tracks the automated and manual checks required to validate the Fo
 | T4 | Unique files | Single-file folders with different names/hashes remain isolated. | `pytest -q tests/test_similarity_groups.py::test_unique_files_remain_isolated` |
 | T5 | Parent consolidation (identical) | `R/X/{A,B}` vs `R/Y/{A,B}`: only `X` and `Y` surface, totals include descendants. | `pytest -q tests/test_similarity_groups.py::test_parent_supersedes_children` |
 | T6 | Parent consolidation (near duplicate) | Near-identical parents with variant child (`media` vs `media_abstract`) surface once; child identical groups suppressed. | `pytest -q tests/test_similarity_groups.py::test_near_duplicate_parent_suppresses_child_identical` |
-| T7 | Diff endpoint | Compares fingerprints to ensure diff output highlights `only_left`, `only_right`, `mismatched`. | *(Covered indirectly via T6 and API integration; add targeted tests when endpoint evolves.)* |
+| T7 | Diff endpoint | `GET /api/scans/{scan_id}/groups/{group_id}/diff` returns `only_left`, `only_right`, and `mismatched` entries for near duplicates. | *(Add dedicated API test when backend suite expands beyond unit scope.)* |
 
 Run the full suite after changes:
 
@@ -25,7 +25,8 @@ PYTHONPATH=app pytest -q
 ## 2. Manual Validation Checklist
 
 - **Frontend build parity**: `cd frontend && npm run build` should pass (catches TypeScript/React integration issues).
-- **Diff modal**: On a near-duplicate entry, hit **Compare** and verify the modal lists "only in" paths and mismatched sizes.
+- **Progress view**: While a scan runs, confirm folder/file counters increment, progress bar advances, and ETA updates.
+- **Diff modal**: On a near-duplicate entry, hit **Compare** and verify the modal lists “only in” paths and mismatched sizes.
 - **Local scan smoke test**:
   1. Mount the target root (bind SMB/NFS via the host OS).
   2. `cd backend && source .venv/bin/activate`  

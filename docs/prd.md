@@ -71,6 +71,7 @@ Non-goals: cross-machine synchronization, deduplicating storage at the filesyste
   - Fingerprints roll up descendant file weights so parent folder metrics (bytes, file count) reflect the entire subtree.
   - If a parent folder meets the similarity threshold, suppress any descendant groups (identical or near-duplicate) whose members are wholly contained by that parent cluster.
   - Suppression applies across labels (e.g., identical children under near-duplicate parents).
+- Identical folders require both byte totals **and** file counts to match exactly; otherwise the pair is classified as near-duplicate.
 
 ---
 
@@ -122,12 +123,14 @@ Non-goals: cross-machine synchronization, deduplicating storage at the filesyste
   - Pairwise similarity matrix.
   - Top K divergent files by delta bytes.
   - Stability and permission warnings.
+- Progress telemetry:
+  - Live counters for folders/files scanned, folders discovered, active workers.
+  - Progress bar updated as folders are processed, with rolling ETA derived from scan rate.
 - Exports: current view → Markdown, JSON (JavaScript Object Notation), CSV (Comma-Separated Values).
 - Internationalization: UTF-8 only for v1.
-- Diff visualization (roadmap):
-  - For `sim < 1.0` clusters, expose a side-by-side tree diff highlighting `only_left`, `only_right`, and `mismatch` nodes.
-  - Provide REST endpoint returning the diff tree derived from aggregated fingerprints.
-  - UI affordance launches compare modal/panel from a group row.
+- Diff visualization:
+  - REST endpoint `GET /api/scans/{scan_id}/groups/{group_id}/diff` returns a diff tree with `only_left`, `only_right`, and `mismatched` entries derived from aggregated fingerprints.
+  - UI exposes a “Compare” action for near-duplicate members; modal renders side-by-side differences with byte sizes.
 
 ---
 
