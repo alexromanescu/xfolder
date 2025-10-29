@@ -106,6 +106,8 @@ class ScanProgress(BaseModel):
     warnings: List[WarningRecord] = Field(default_factory=list)
     root_path: Path
     stats: Dict[str, int] = Field(default_factory=dict)
+    progress: Optional[float] = None
+    eta_seconds: Optional[int] = None
 
 
 class ExportFilters(BaseModel):

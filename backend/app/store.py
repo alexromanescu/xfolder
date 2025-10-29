@@ -50,7 +50,12 @@ class ScanJob:
         self.started_at = datetime.now(timezone.utc)
         self.completed_at: Optional[datetime] = None
         self.warnings: List[WarningRecord] = []
-        self.stats: Dict[str, int] = {}
+        self.stats: Dict[str, int] = {
+            "files_scanned": 0,
+            "folders_scanned": 0,
+            "folders_discovered": 0,
+            "workers": 0,
+        }
         self.result: Optional[ScanResult] = None
         self.groups: Dict[FolderLabel, List[GroupRecord]] = defaultdict(list)
         self.error: Optional[str] = None
@@ -94,6 +99,28 @@ class ScanManager:
 
     def get_progress(self, scan_id: str) -> ScanProgress:
         job = self.get_job(scan_id)
+        stats_snapshot = dict(job.stats)
+        progress = None
+        eta_seconds = None
+        now = datetime.now(timezone.utc)
+
+        if job.status == ScanStatus.COMPLETED:
+            progress = 1.0
+            eta_seconds = 0
+        elif job.status == ScanStatus.RUNNING:
+            scanned = stats_snapshot.get("folders_scanned", 0)
+            discovered = stats_snapshot.get("folders_discovered", 0)
+            discovered = max(discovered, scanned if scanned > 0 else 1)
+            if discovered > 0:
+                ratio = scanned / discovered
+                progress = min(ratio, 0.99)
+            elapsed = (now - job.started_at).total_seconds()
+            if elapsed > 0 and scanned > 0:
+                rate = scanned / elapsed
+                remaining = max(discovered - scanned, 0)
+                if rate > 0:
+                    eta_seconds = int(remaining / rate)
+
         return ScanProgress(
             scan_id=job.scan_id,
             status=job.status,
@@ -101,7 +128,9 @@ class ScanManager:
             completed_at=job.completed_at,
             warnings=job.warnings,
             root_path=job.request.root_path,
-            stats=job.stats,
+            stats=stats_snapshot,
+            progress=progress,
+            eta_seconds=eta_seconds,
         )
 
     def get_groups(self, scan_id: str, label: Optional[FolderLabel] = None) -> List[GroupRecord]:
@@ -314,7 +343,7 @@ class ScanManager:
     def _run_scan(self, job: ScanJob) -> None:
         job.status = ScanStatus.RUNNING
         try:
-            scanner = FolderScanner(job.request, cache=self.file_cache)
+            scanner = FolderScanner(job.request, cache=self.file_cache, stats_sink=job.stats)
             result = scanner.scan()
             similarity_groups = compute_similarity_groups(result.fingerprints, job.request.similarity_threshold)
 

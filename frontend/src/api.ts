@@ -29,6 +29,8 @@ export interface ScanProgress {
   warnings: WarningRecord[];
   root_path: string;
   stats: Record<string, number>;
+  progress?: number | null;
+  eta_seconds?: number | null;
 }
 
 export interface FolderRecord {

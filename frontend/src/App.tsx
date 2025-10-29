@@ -16,7 +16,7 @@ import {
   fetchGroups,
   fetchScans,
 } from "./api";
-import { formatDate, humanBytes, humanDuration } from "./format";
+import { formatDate, humanBytes, humanDuration, formatEta } from "./format";
 import { MetricCard } from "./components/MetricCard";
 import { ScanForm } from "./components/ScanForm";
 import { GroupTable } from "./components/GroupTable";
@@ -50,6 +50,10 @@ export default function App() {
     () => scans.find((item) => item.scan_id === selectedScanId) ?? (scans[0] ?? null),
     [scans, selectedScanId],
   );
+
+  const progressValue = currentScan?.progress ?? null;
+  const etaLabel = formatEta(currentScan?.eta_seconds ?? null);
+  const isRunning = currentScan?.status === "running";
 
   useEffect(() => {
     setSelectedPaths(new Set<string>());
@@ -233,6 +237,30 @@ export default function App() {
       </header>
       <main className="app-content">
         <ScanForm onSubmit={handleScanLaunch} busy={loadingScan} />
+
+        {isRunning ? (
+          <div className="panel">
+            <div className="panel-header">
+              <div>
+                <div className="panel-title">Scan Progress</div>
+                <p className="muted">
+                  Scanned {currentScan?.stats?.folders_scanned ?? 0} folders ·
+                  {" "}
+                  {currentScan?.stats?.files_scanned ?? 0} files — {etaLabel}
+                </p>
+              </div>
+              <div className="muted" style={{ fontWeight: 600 }}>
+                {progressValue != null ? `${Math.round(progressValue * 100)}%` : "Working…"}
+              </div>
+            </div>
+            <div className={`progress-bar${progressValue == null ? " indeterminate" : ""}`}>
+              <div
+                className={`progress-bar-fill${progressValue == null ? " indeterminate" : ""}`}
+                style={progressValue != null ? { width: `${Math.max(2, progressValue * 100)}%` } : undefined}
+              />
+            </div>
+          </div>
+        ) : null}
 
         {currentScan ? (
           <div className="panel">
@@ -434,6 +462,8 @@ function scansEqual(a: ScanProgress[], b: ScanProgress[]): boolean {
       left.root_path !== right.root_path ||
       left.started_at !== right.started_at ||
       (left.completed_at ?? "") !== (right.completed_at ?? "") ||
+      (left.progress ?? null) !== (right.progress ?? null) ||
+      (left.eta_seconds ?? null) !== (right.eta_seconds ?? null) ||
       !statsEqual(left.stats ?? {}, right.stats ?? {})
     ) {
       return false;

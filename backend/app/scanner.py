@@ -46,13 +46,18 @@ class FolderScanner:
         self,
         request: ScanRequest,
         cache: Optional[FileHashCache] = None,
+        stats_sink: Optional[Dict[str, int]] = None,
     ) -> None:
         self.request = request
         self.cache = cache
+        self._stats_sink = stats_sink
         self._warnings: List[WarningRecord] = []
         self._stats: Dict[str, int] = defaultdict(int)
         self._seen_inodes: Set[Tuple[int, int]] = set()
         self._lock = threading.RLock()
+        self._set_stat("files_scanned", 0)
+        self._set_stat("folders_scanned", 0)
+        self._set_stat("folders_discovered", 1)
 
     def scan(self) -> ScanResult:
         root = self.request.root_path
@@ -63,7 +68,7 @@ class FolderScanner:
             raise FileNotFoundError(f"Root path {root} is not a directory")
 
         max_workers = self.request.concurrency or min(32, (os.cpu_count() or 4) * 2)
-        self._stats["workers"] = max_workers
+        self._set_stat("workers", max_workers)
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             for dirpath, dirnames, filenames in os.walk(root):
@@ -72,6 +77,16 @@ class FolderScanner:
                 if self._is_excluded(rel_dir):
                     dirnames[:] = []
                     continue
+
+                filtered_dirnames: List[str] = []
+                for dirname in dirnames:
+                    rel_child = rel_dir / dirname
+                    if self._is_excluded(rel_child):
+                        continue
+                    filtered_dirnames.append(dirname)
+                dirnames[:] = filtered_dirnames
+                if filtered_dirnames:
+                    self._increment_stat("folders_discovered", len(filtered_dirnames))
 
                 files: List[FileRecord] = []
                 total_size = 0
@@ -98,6 +113,7 @@ class FolderScanner:
                 folders[folder_key] = folder_record
                 fingerprint = self._build_fingerprint(folder_record, files)
                 fingerprints[folder_key] = fingerprint
+                self._set_stat("folders_scanned", len(folders))
 
         self._stats["folders_scanned"] = len(folders)
         fingerprints = aggregate_fingerprints(fingerprints)
@@ -171,6 +187,14 @@ class FolderScanner:
     def _increment_stat(self, key: str, amount: int = 1) -> None:
         with self._lock:
             self._stats[key] += amount
+            if self._stats_sink is not None:
+                self._stats_sink[key] = self._stats[key]
+
+    def _set_stat(self, key: str, value: int) -> None:
+        with self._lock:
+            self._stats[key] = value
+            if self._stats_sink is not None:
+                self._stats_sink[key] = value
 
     def _build_file_record(self, path: Path, rel_path: str, stat: os.stat_result) -> Optional[FileRecord]:
         mtime = stat.st_mtime

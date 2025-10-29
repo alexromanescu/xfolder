@@ -40,3 +40,14 @@ export function relativePath(path: string, root: string): string {
   }
   return path;
 }
+
+export function formatEta(seconds?: number | null): string {
+  if (seconds == null) return "calculating";
+  if (seconds <= 0) return "complete";
+  if (seconds < 60) return `${Math.max(1, Math.round(seconds))}s remaining`;
+  const minutes = Math.floor(seconds / 60);
+  const rem = Math.floor(seconds % 60);
+  if (minutes < 60) return `${minutes}m ${rem}s remaining`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m remaining`;
+}
