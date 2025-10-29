@@ -20,17 +20,26 @@ from .models import (
     DeletionPlan,
     DeletionPlanPayload,
     DeletionResult,
+    DiffEntry,
     ExportFilters,
     ExportHeader,
     FolderLabel,
+    GroupDiff,
     GroupRecord,
+    MismatchEntry,
     ScanProgress,
     ScanRequest,
     ScanStatus,
     WarningRecord,
     WarningType,
 )
-from .scanner import FolderScanner, ScanResult, compute_similarity_groups, group_to_record
+from .scanner import (
+    FolderScanner,
+    ScanResult,
+    compute_fingerprint_diff,
+    compute_similarity_groups,
+    group_to_record,
+)
 
 
 class ScanJob:
@@ -105,6 +114,50 @@ class ScanManager:
         for records in job.groups.values():
             groups.extend(records)
         return groups
+
+    def get_group_diff(
+        self,
+        scan_id: str,
+        group_id: str,
+        left_relative: str,
+        right_relative: str,
+    ) -> GroupDiff:
+        job = self.get_job(scan_id)
+        if job.status != ScanStatus.COMPLETED or not job.result:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Scan is not complete")
+
+        target_record: Optional[GroupRecord] = None
+        for records in job.groups.values():
+            for record in records:
+                if record.group_id == group_id:
+                    target_record = record
+                    break
+            if target_record:
+                break
+        if not target_record:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
+
+        left_member = next((member for member in target_record.members if member.relative_path == left_relative), None)
+        right_member = next((member for member in target_record.members if member.relative_path == right_relative), None)
+        if not left_member or not right_member:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Members not found in group")
+
+        fingerprints = job.result.fingerprints
+        if left_member.relative_path not in fingerprints or right_member.relative_path not in fingerprints:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fingerprint missing for members")
+
+        diff = compute_fingerprint_diff(
+            fingerprints[left_member.relative_path],
+            fingerprints[right_member.relative_path],
+        )
+
+        return GroupDiff(
+            left=left_member,
+            right=right_member,
+            only_left=diff.only_left,
+            only_right=diff.only_right,
+            mismatched=diff.mismatched,
+        )
 
     def create_deletion_plan(self, scan_id: str, payload: DeletionPlanPayload) -> DeletionPlan:
         job = self.get_job(scan_id)

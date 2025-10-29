@@ -15,10 +15,13 @@ from .cache import FileHashCache, FileCacheKey
 from .models import (
     DirectoryFingerprint,
     DivergenceRecord,
+    DiffEntry,
     FileEqualityMode,
     FileRecord,
     FolderLabel,
     FolderRecord,
+    GroupDiff,
+    MismatchEntry,
     PairwiseSimilarity,
     ScanRequest,
     StructurePolicy,
@@ -97,7 +100,7 @@ class FolderScanner:
                 fingerprints[folder_key] = fingerprint
 
         self._stats["folders_scanned"] = len(folders)
-        fingerprints = self._aggregate_fingerprints(fingerprints)
+        fingerprints = aggregate_fingerprints(fingerprints)
         return ScanResult(
             folders=folders,
             fingerprints=fingerprints,
@@ -284,35 +287,88 @@ class FolderScanner:
             return f"{base}#{record.sha256}"
         return f"{base}:{record.size}"
 
-    def _aggregate_fingerprints(
-        self,
-        fingerprints: Dict[str, DirectoryFingerprint],
-    ) -> Dict[str, DirectoryFingerprint]:
-        aggregated: Dict[str, DirectoryFingerprint] = {}
-        children: Dict[str, List[str]] = defaultdict(list)
-        for key in fingerprints:
-            parent = str(Path(key).parent) if key != "." else None
-            if parent:
-                children[parent].append(key)
+def aggregate_fingerprints(
+    fingerprints: Dict[str, DirectoryFingerprint],
+) -> Dict[str, DirectoryFingerprint]:
+    aggregated: Dict[str, DirectoryFingerprint] = {}
+    children: Dict[str, List[str]] = defaultdict(list)
+    for key in fingerprints:
+        parent = str(Path(key).parent) if key != "." else None
+        if parent:
+            children[parent].append(key)
 
-        for key in sorted(fingerprints.keys(), key=lambda value: len(Path(value).parts), reverse=True):
-            fingerprint = fingerprints[key]
-            combined = dict(fingerprint.file_weights)
-            for child_key in children.get(key, []):
-                child_fp = aggregated.get(child_key)
-                if not child_fp:
-                    continue
-                prefix_path = Path(child_key).relative_to(Path(key)) if key != "." else Path(child_key)
-                for identity, weight in child_fp.file_weights.items():
-                    prefixed_identity = _prefix_identity(prefix_path, identity)
-                    combined[prefixed_identity] = combined.get(prefixed_identity, 0) + weight
-            aggregated_fp = DirectoryFingerprint(folder=fingerprint.folder, file_weights=combined)
-            total_bytes = sum(combined.values())
-            file_count = len(combined)
-            fingerprint.folder.total_bytes = total_bytes
-            fingerprint.folder.file_count = file_count
-            aggregated[key] = aggregated_fp
-        return aggregated
+    for key in sorted(fingerprints.keys(), key=lambda value: len(Path(value).parts), reverse=True):
+        fingerprint = fingerprints[key]
+        combined = dict(fingerprint.file_weights)
+        for child_key in children.get(key, []):
+            child_fp = aggregated.get(child_key)
+            if not child_fp:
+                continue
+            prefix_path = Path(child_key).relative_to(Path(key)) if key != "." else Path(child_key)
+            for identity, weight in child_fp.file_weights.items():
+                prefixed_identity = _prefix_identity(prefix_path, identity)
+                combined[prefixed_identity] = combined.get(prefixed_identity, 0) + weight
+        aggregated_fp = DirectoryFingerprint(folder=fingerprint.folder, file_weights=combined)
+        total_bytes = sum(combined.values())
+        file_count = len(combined)
+        fingerprint.folder.total_bytes = total_bytes
+        fingerprint.folder.file_count = file_count
+        aggregated[key] = aggregated_fp
+    return aggregated
+
+
+def compute_fingerprint_diff(
+    left: DirectoryFingerprint,
+    right: DirectoryFingerprint,
+) -> GroupDiff:
+    left_map = _identity_map(left.file_weights)
+    right_map = _identity_map(right.file_weights)
+
+    only_left: List[DiffEntry] = []
+    only_right: List[DiffEntry] = []
+    mismatched: List[MismatchEntry] = []
+
+    for path, bytes_left in left_map.items():
+        if path not in right_map:
+            only_left.append(DiffEntry(path=path, bytes=bytes_left))
+        else:
+            bytes_right = right_map[path]
+            if bytes_left != bytes_right:
+                mismatched.append(
+                    MismatchEntry(path=path, left_bytes=bytes_left, right_bytes=bytes_right)
+                )
+
+    for path, bytes_right in right_map.items():
+        if path not in left_map:
+            only_right.append(DiffEntry(path=path, bytes=bytes_right))
+
+    only_left.sort(key=lambda entry: entry.path)
+    only_right.sort(key=lambda entry: entry.path)
+    mismatched.sort(key=lambda entry: entry.path)
+
+    return GroupDiff(
+        left=left.folder,
+        right=right.folder,
+        only_left=only_left,
+        only_right=only_right,
+        mismatched=mismatched,
+    )
+
+
+def _identity_map(weights: Dict[str, int]) -> Dict[str, int]:
+    mapping: Dict[str, int] = {}
+    for identity, bytes_size in weights.items():
+        path = _identity_to_path(identity)
+        mapping[path] = mapping.get(path, 0) + bytes_size
+    return mapping
+
+
+def _identity_to_path(identity: str) -> str:
+    if "#" in identity:
+        return identity.split("#", 1)[0]
+    if ":" in identity:
+        return identity.rsplit(":", 1)[0]
+    return identity
 
 
 def compute_similarity_groups(
@@ -442,6 +498,13 @@ def classify_groups(
             label = FolderLabel.NEAR_DUPLICATE
         else:
             label = FolderLabel.PARTIAL_OVERLAP
+        if label == FolderLabel.IDENTICAL:
+            base_bytes = group.members[0].total_bytes
+            base_count = group.members[0].file_count
+            for member in group.members[1:]:
+                if member.total_bytes != base_bytes or member.file_count != base_count:
+                    label = FolderLabel.NEAR_DUPLICATE
+                    break
         classified[label].append((group, max_similarity))
     return classified
 

@@ -17,6 +17,7 @@ from .models import (
     DeletionResult,
     ExportFilters,
     FolderLabel,
+    GroupDiff,
     GroupRecord,
     ScanProgress,
     ScanRequest,
@@ -118,6 +119,17 @@ def confirm_plan(
     manager: ScanManager = Depends(get_scan_manager),
 ) -> DeletionResult:
     return manager.execute_plan(plan_id, payload.token)
+
+
+@app.get("/api/scans/{scan_id}/groups/{group_id}/diff", response_model=GroupDiff)
+def get_group_diff(
+    scan_id: str,
+    group_id: str,
+    left: str,
+    right: str,
+    manager: ScanManager = Depends(get_scan_manager),
+) -> GroupDiff:
+    return manager.get_group_diff(scan_id, group_id, left, right)
 
 
 @app.exception_handler(Exception)

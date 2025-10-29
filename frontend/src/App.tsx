@@ -3,6 +3,7 @@ import {
   DeletionPlan,
   DeletionResult,
   FolderLabel,
+  GroupDiff,
   GroupRecord,
   ScanProgress,
   ScanRequest,
@@ -11,6 +12,7 @@ import {
   createDeletionPlan,
   createScan,
   exportGroups,
+  fetchGroupDiff,
   fetchGroups,
   fetchScans,
 } from "./api";
@@ -19,6 +21,7 @@ import { MetricCard } from "./components/MetricCard";
 import { ScanForm } from "./components/ScanForm";
 import { GroupTable } from "./components/GroupTable";
 import { WarningsPanel } from "./components/WarningsPanel";
+import { DiffModal } from "./components/DiffModal";
 
 type GroupTab = FolderLabel;
 
@@ -39,6 +42,9 @@ export default function App() {
   const [plan, setPlan] = useState<DeletionPlan | null>(null);
   const [planResult, setPlanResult] = useState<DeletionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [diffOpen, setDiffOpen] = useState(false);
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [diffData, setDiffData] = useState<GroupDiff | undefined>(undefined);
 
   const currentScan = useMemo<ScanProgress | null>(
     () => scans.find((item) => item.scan_id === selectedScanId) ?? (scans[0] ?? null),
@@ -192,7 +198,10 @@ export default function App() {
 
   const currentWarnings: WarningRecord[] = currentScan?.warnings ?? [];
 
-  const currentGroups = groupsByLabel[activeTab] ?? [];
+  const currentGroups =
+    activeTab === "identical"
+      ? [...groupsByLabel.identical, ...groupsByLabel.near_duplicate]
+      : groupsByLabel[activeTab] ?? [];
 
   const totalPotentialReclaim = useMemo(() => {
     if (!groupsByLabel.identical.length && !groupsByLabel.near_duplicate.length) return 0;
@@ -355,6 +364,7 @@ export default function App() {
                 selected={selectedPaths}
                 onToggle={togglePath}
                 emptyLabel="No matches detected for this view yet."
+                onCompare={handleCompare}
               />
             )}
             <div style={{ marginTop: 18, display: "flex", gap: 12 }}>
@@ -398,6 +408,15 @@ export default function App() {
             <p className="muted">{error}</p>
           </div>
         ) : null}
+        <DiffModal
+          open={diffOpen}
+          diff={diffData}
+          loading={diffLoading}
+          onClose={() => {
+            setDiffOpen(false);
+            setDiffData(undefined);
+          }}
+        />
       </main>
     </div>
   );
@@ -439,3 +458,24 @@ function statsEqual(
   }
   return true;
 }
+  const handleCompare = async (group: GroupRecord, memberRelative: string) => {
+    if (!currentScan) return;
+    setDiffOpen(true);
+    setDiffLoading(true);
+    setDiffData(undefined);
+    try {
+      const diff = await fetchGroupDiff(
+        currentScan.scan_id,
+        group.group_id,
+        group.members[0].relative_path,
+        memberRelative,
+      );
+      setDiffData(diff);
+    } catch (cause) {
+      console.error("Failed to load diff", cause);
+      setDiffData(undefined);
+      setError("Unable to load comparison diff. See server logs for details.");
+    } finally {
+      setDiffLoading(false);
+    }
+  };

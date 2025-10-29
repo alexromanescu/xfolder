@@ -61,6 +61,25 @@ export interface GroupRecord {
   suppressed_descendants: boolean;
 }
 
+export interface DiffEntry {
+  path: string;
+  bytes: number;
+}
+
+export interface MismatchEntry {
+  path: string;
+  left_bytes: number;
+  right_bytes: number;
+}
+
+export interface GroupDiff {
+  left: FolderRecord;
+  right: FolderRecord;
+  only_left: DiffEntry[];
+  only_right: DiffEntry[];
+  mismatched: MismatchEntry[];
+}
+
 export interface DeletionPlan {
   plan_id: string;
   token: string;
@@ -138,6 +157,18 @@ export async function confirmDeletionPlan(
 ): Promise<DeletionResult> {
   const response = await api.post<DeletionResult>(`/deletions/${planId}/confirm`, {
     token,
+  });
+  return response.data;
+}
+
+export async function fetchGroupDiff(
+  scanId: string,
+  groupId: string,
+  left: string,
+  right: string,
+): Promise<GroupDiff> {
+  const response = await api.get<GroupDiff>(`/scans/${scanId}/groups/${groupId}/diff`, {
+    params: { left, right },
   });
   return response.data;
 }

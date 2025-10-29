@@ -7,6 +7,7 @@ interface GroupTableProps {
   selected: Set<string>;
   onToggle: (path: string) => void;
   emptyLabel: string;
+  onCompare: (group: GroupRecord, member: string) => void;
 }
 
 const labelClass: Record<string, string> = {
@@ -21,6 +22,7 @@ export function GroupTable({
   selected,
   onToggle,
   emptyLabel,
+  onCompare,
 }: GroupTableProps) {
   if (!groups.length) {
     return <p className="muted">{emptyLabel}</p>;
@@ -53,6 +55,7 @@ export function GroupTable({
                 : 0;
             const reference = group.members[0];
             const referencePath = reference ? relativePath(reference.path, rootPath) : group.canonical_path;
+            const isNearDuplicate = maxSimilarity < 1 - 1e-9;
             return (
               <tr key={group.group_id}>
                 <td>
@@ -75,32 +78,34 @@ export function GroupTable({
                 </td>
                 <td>
                   <div className="muted">Select paths to quarantine</div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: 8 }}>
+                  <div className="duplicates-list">
                     {group.members.slice(1).map((member) => {
                       const memberPath = member.path;
                       const checked = selected.has(memberPath);
                       return (
-                        <label
-                          key={memberPath}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "10px",
-                          }}
-                        >
+                        <div className="duplicate-row" key={memberPath}>
                           <input
                             type="checkbox"
                             checked={checked}
                             onChange={() => onToggle(memberPath)}
                           />
-                          <span>
+                          <div>
                             {relativePath(member.path, rootPath)}
                             <div className="muted">
                               {humanBytes(member.total_bytes)} • {member.file_count} files
                               {member.unstable ? " • unstable" : ""}
                             </div>
-                          </span>
-                        </label>
+                          </div>
+                          {isNearDuplicate ? (
+                            <button
+                              type="button"
+                              className="button secondary compare-button"
+                              onClick={() => onCompare(group, member.relative_path)}
+                            >
+                              Compare
+                            </button>
+                          ) : null}
+                        </div>
                       );
                     })}
                   </div>

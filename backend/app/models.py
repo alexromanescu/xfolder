@@ -149,6 +149,25 @@ class ConfirmDeletionPayload(BaseModel):
     token: str
 
 
+class DiffEntry(BaseModel):
+    path: str
+    bytes: int
+
+
+class MismatchEntry(BaseModel):
+    path: str
+    left_bytes: int
+    right_bytes: int
+
+
+class GroupDiff(BaseModel):
+    left: FolderRecord
+    right: FolderRecord
+    only_left: List[DiffEntry]
+    only_right: List[DiffEntry]
+    mismatched: List[MismatchEntry]
+
+
 @dataclass
 class DirectoryFingerprint:
     folder: FolderRecord
