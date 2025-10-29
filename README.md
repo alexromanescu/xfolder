@@ -103,6 +103,7 @@ Runtime defaults align with the PRD: similarity threshold 0.80, `name_size` equa
 ## Testing & Validation
 
 - **Backend sanity**: `python3 -m compileall backend/app`
+- **Backend unit tests**: `make test-backend` (uses pytest fixtures to synthesize nested duplicate trees, including ancestor/descendant layouts).
 - **Run a sample scan**: mount a test directory and call `POST /api/scans` with JSON payload using `curl` or the UI.
 - **Frontend lint**: `npm run build` (build step catches TS errors).
 

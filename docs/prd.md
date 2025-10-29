@@ -67,9 +67,10 @@ Non-goals: cross-machine synchronization, deduplicating storage at the filesyste
 - Structure policy:
   - Default `relative`: compare by relative paths; folder structure matters.
   - Option `bag_of_files`: ignore paths; compare as multisets of filenames.
-- Suppression rule:
-  - If parent folders meet threshold, suppress their descendant pairs in the Identicals view.
-  - UI toggle allows drill-down to show suppressed descendants.
+- Hierarchy consolidation:
+  - Fingerprints roll up descendant file weights so parent folder metrics (bytes, file count) reflect the entire subtree.
+  - If a parent folder meets the similarity threshold, suppress any descendant groups (identical or near-duplicate) whose members are wholly contained by that parent cluster.
+  - Suppression applies across labels (e.g., identical children under near-duplicate parents).
 
 ---
 
@@ -116,13 +117,17 @@ Non-goals: cross-machine synchronization, deduplicating storage at the filesyste
 - Sorting: by similarity, potential reclaimed bytes, path.
 - Filtering: by label, similarity range, min total bytes, glob include/exclude.
 - Item details:
-  - Canonical path (policy: shortest absolute path).
-  - Member list with bytes and file counts.
+  - Canonical folder shown once per group with aggregated byte size and file count.
+  - Duplicate members list omits the canonical entry; each row is displayed relative to the active Root Path.
   - Pairwise similarity matrix.
   - Top K divergent files by delta bytes.
   - Stability and permission warnings.
 - Exports: current view → Markdown, JSON (JavaScript Object Notation), CSV (Comma-Separated Values).
 - Internationalization: UTF-8 only for v1.
+- Diff visualization (roadmap):
+  - For `sim < 1.0` clusters, expose a side-by-side tree diff highlighting `only_left`, `only_right`, and `mismatch` nodes.
+  - Provide REST endpoint returning the diff tree derived from aggregated fingerprints.
+  - UI affordance launches compare modal/panel from a group row.
 
 ---
 

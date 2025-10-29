@@ -58,7 +58,7 @@ export default function App() {
       try {
         const latest = await fetchScans();
         if (cancelled) return;
-        setScans(latest);
+        setScans((prev) => (scansEqual(prev, latest) ? prev : latest));
         setSelectedScanId((prev) => {
           if (prev) return prev;
           return latest.length ? latest[0].scan_id : null;
@@ -351,6 +351,7 @@ export default function App() {
             ) : (
               <GroupTable
                 groups={currentGroups}
+                rootPath={currentScan.root_path}
                 selected={selectedPaths}
                 onToggle={togglePath}
                 emptyLabel="No matches detected for this view yet."
@@ -400,4 +401,41 @@ export default function App() {
       </main>
     </div>
   );
+}
+
+function scansEqual(a: ScanProgress[], b: ScanProgress[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const left = a[i];
+    const right = b[i];
+    if (
+      left.scan_id !== right.scan_id ||
+      left.status !== right.status ||
+      left.root_path !== right.root_path ||
+      left.started_at !== right.started_at ||
+      (left.completed_at ?? "") !== (right.completed_at ?? "") ||
+      !statsEqual(left.stats ?? {}, right.stats ?? {})
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function statsEqual(
+  a: Record<string, number>,
+  b: Record<string, number>,
+): boolean {
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) {
+    return false;
+  }
+  for (const key of aKeys) {
+    if (a[key] !== b[key]) {
+      return false;
+    }
+  }
+  return true;
 }

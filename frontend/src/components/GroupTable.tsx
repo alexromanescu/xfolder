@@ -1,8 +1,9 @@
 import type { GroupRecord } from "../api";
-import { humanBytes } from "../format";
+import { humanBytes, relativePath } from "../format";
 
 interface GroupTableProps {
   groups: GroupRecord[];
+  rootPath: string;
   selected: Set<string>;
   onToggle: (path: string) => void;
   emptyLabel: string;
@@ -14,7 +15,13 @@ const labelClass: Record<string, string> = {
   partial_overlap: "badge partial",
 };
 
-export function GroupTable({ groups, selected, onToggle, emptyLabel }: GroupTableProps) {
+export function GroupTable({
+  groups,
+  rootPath,
+  selected,
+  onToggle,
+  emptyLabel,
+}: GroupTableProps) {
   if (!groups.length) {
     return <p className="muted">{emptyLabel}</p>;
   }
@@ -25,8 +32,8 @@ export function GroupTable({ groups, selected, onToggle, emptyLabel }: GroupTabl
         <thead>
           <tr>
             <th />
-            <th>Group</th>
-            <th>Members</th>
+            <th>Folder</th>
+            <th>Duplicates</th>
             <th>Similarity</th>
             <th>Reclaimable</th>
             <th>Stability</th>
@@ -44,6 +51,8 @@ export function GroupTable({ groups, selected, onToggle, emptyLabel }: GroupTabl
                     .slice(1)
                     .reduce((sum, member) => sum + member.total_bytes, 0)
                 : 0;
+            const reference = group.members[0];
+            const referencePath = reference ? relativePath(reference.path, rootPath) : group.canonical_path;
             return (
               <tr key={group.group_id}>
                 <td>
@@ -52,19 +61,23 @@ export function GroupTable({ groups, selected, onToggle, emptyLabel }: GroupTabl
                       ? "Identical"
                       : group.label === "near_duplicate"
                         ? "Near Duplicate"
-                        : "Overlap"}
+                      : "Overlap"}
                   </span>
                 </td>
                 <td>
-                  <div>{group.canonical_path}</div>
+                  <div>{referencePath}</div>
+                  {reference ? (
+                    <div className="muted">
+                      {humanBytes(reference.total_bytes)} • {reference.file_count} files
+                    </div>
+                  ) : null}
                   <div className="muted">{group.group_id}</div>
                 </td>
                 <td>
                   <div className="muted">Select paths to quarantine</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: 8 }}>
-                    {group.members.map((member, index) => {
+                    {group.members.slice(1).map((member) => {
                       const memberPath = member.path;
-                      const isCanonical = index === 0;
                       const checked = selected.has(memberPath);
                       return (
                         <label
@@ -78,11 +91,10 @@ export function GroupTable({ groups, selected, onToggle, emptyLabel }: GroupTabl
                           <input
                             type="checkbox"
                             checked={checked}
-                            disabled={isCanonical}
                             onChange={() => onToggle(memberPath)}
                           />
                           <span>
-                            {member.path}
+                            {relativePath(member.path, rootPath)}
                             <div className="muted">
                               {humanBytes(member.total_bytes)} • {member.file_count} files
                               {member.unstable ? " • unstable" : ""}

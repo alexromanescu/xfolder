@@ -21,6 +21,7 @@ from .models import (
     FolderRecord,
     PairwiseSimilarity,
     ScanRequest,
+    StructurePolicy,
     WarningRecord,
     WarningType,
 )
@@ -96,6 +97,7 @@ class FolderScanner:
                 fingerprints[folder_key] = fingerprint
 
         self._stats["folders_scanned"] = len(folders)
+        fingerprints = self._aggregate_fingerprints(fingerprints)
         return ScanResult(
             folders=folders,
             fingerprints=fingerprints,
@@ -258,19 +260,59 @@ class FolderScanner:
 
     def _build_fingerprint(self, folder: FolderRecord, files: List[FileRecord]) -> DirectoryFingerprint:
         weights: Dict[str, int] = defaultdict(int)
+        folder_prefix = Path(folder.relative_path) if folder.relative_path != "." else None
+
         for record in files:
-            identity = self._file_identity(record)
+            record_path = Path(record.relative_path)
+            if folder_prefix:
+                try:
+                    relative_path = record_path.relative_to(folder_prefix)
+                except ValueError:
+                    relative_path = Path(record_path.name)
+            else:
+                relative_path = record_path
+            identity = self._file_identity(relative_path, record)
             weights[identity] += record.size
         return DirectoryFingerprint(folder=folder, file_weights=dict(weights))
 
-    def _file_identity(self, record: FileRecord) -> str:
-        if self.request.structure_policy == "bag_of_files":
-            base = Path(record.relative_path).name
+    def _file_identity(self, relative_path: Path, record: FileRecord) -> str:
+        if self.request.structure_policy == StructurePolicy.BAG_OF_FILES:
+            base = relative_path.name
         else:
-            base = record.relative_path
+            base = relative_path.as_posix()
         if self.request.file_equality == FileEqualityMode.SHA256:
             return f"{base}#{record.sha256}"
         return f"{base}:{record.size}"
+
+    def _aggregate_fingerprints(
+        self,
+        fingerprints: Dict[str, DirectoryFingerprint],
+    ) -> Dict[str, DirectoryFingerprint]:
+        aggregated: Dict[str, DirectoryFingerprint] = {}
+        children: Dict[str, List[str]] = defaultdict(list)
+        for key in fingerprints:
+            parent = str(Path(key).parent) if key != "." else None
+            if parent:
+                children[parent].append(key)
+
+        for key in sorted(fingerprints.keys(), key=lambda value: len(Path(value).parts), reverse=True):
+            fingerprint = fingerprints[key]
+            combined = dict(fingerprint.file_weights)
+            for child_key in children.get(key, []):
+                child_fp = aggregated.get(child_key)
+                if not child_fp:
+                    continue
+                prefix_path = Path(child_key).relative_to(Path(key)) if key != "." else Path(child_key)
+                for identity, weight in child_fp.file_weights.items():
+                    prefixed_identity = _prefix_identity(prefix_path, identity)
+                    combined[prefixed_identity] = combined.get(prefixed_identity, 0) + weight
+            aggregated_fp = DirectoryFingerprint(folder=fingerprint.folder, file_weights=combined)
+            total_bytes = sum(combined.values())
+            file_count = len(combined)
+            fingerprint.folder.total_bytes = total_bytes
+            fingerprint.folder.file_count = file_count
+            aggregated[key] = aggregated_fp
+        return aggregated
 
 
 def compute_similarity_groups(
@@ -278,12 +320,9 @@ def compute_similarity_groups(
     threshold: float,
 ) -> List["SimilarityGroup"]:
     folders = list(fingerprints.values())
-    buckets: Dict[Tuple[int, int], List[DirectoryFingerprint]] = defaultdict(list)
+    buckets: Dict[int, List[DirectoryFingerprint]] = defaultdict(list)
     for fingerprint in folders:
-        bucket_key = (
-            round(fingerprint.folder.total_bytes / (10 * 1024 * 1024)),  # 10 MB bucket
-            fingerprint.folder.file_count,
-        )
+        bucket_key = round(fingerprint.folder.total_bytes / (10 * 1024 * 1024))
         buckets[bucket_key].append(fingerprint)
 
     groups: List[SimilarityGroup] = []
@@ -296,6 +335,8 @@ def compute_similarity_groups(
                 if key in visited_pairs:
                     continue
                 visited_pairs.add(key)
+                if _is_ancestor_descendant_pair(a.folder.relative_path, b.folder.relative_path):
+                    continue
                 similarity = weighted_jaccard(a.file_weights, b.file_weights)
                 if similarity >= threshold:
                     groups.append(
@@ -317,7 +358,7 @@ def weighted_jaccard(a: Dict[str, int], b: Dict[str, int]) -> float:
         intersection += min(wa, wb)
         union += max(wa, wb)
     if union == 0:
-        return 1.0
+        return 0.0
     return intersection / union
 
 
@@ -442,3 +483,34 @@ def compute_divergences(a: Dict[str, int], b: Dict[str, int], top_k: int = 5) ->
             path = name
         records.append(DivergenceRecord(path_a=path, path_b=path, delta_bytes=delta))
     return records
+
+
+def _is_ancestor_descendant_pair(path_a: str, path_b: str) -> bool:
+    if path_a == path_b:
+        return False
+    if path_a == "." or path_b == ".":
+        return True
+    if path_a.endswith("/"):
+        path_a = path_a.rstrip("/")
+    if path_b.endswith("/"):
+        path_b = path_b.rstrip("/")
+    return path_b.startswith(f"{path_a}/") or path_a.startswith(f"{path_b}/")
+
+
+def _prefix_identity(prefix: Path, identity: str) -> str:
+    if not prefix or str(prefix) in (".", ""):
+        return identity
+    prefix_str = prefix.as_posix()
+    if not identity:
+        return prefix_str
+    if "#" in identity:
+        base, rest = identity.split("#", 1)
+        base = base.strip("/")
+        combined_base = f"{prefix_str}/{base}" if base else prefix_str
+        return f"{combined_base}#{rest}"
+    if ":" in identity:
+        base, rest = identity.split(":", 1)
+        base = base.strip("/")
+        combined_base = f"{prefix_str}/{base}" if base else prefix_str
+        return f"{combined_base}:{rest}"
+    return f"{prefix_str}/{identity}"

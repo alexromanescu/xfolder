@@ -3,7 +3,7 @@ PIP ?= pip3
 FRONTEND_DIR := frontend
 BACKEND_DIR := backend
 
-.PHONY: install-backend install-frontend dev-backend dev-frontend format lint docker-build
+.PHONY: install-backend install-frontend dev-backend dev-frontend format lint docker-build test-backend
 
 install-backend:
 	$(PIP) install -r $(BACKEND_DIR)/requirements.txt
@@ -19,6 +19,9 @@ dev-frontend:
 
 format:
 	$(PYTHON) -m black $(BACKEND_DIR)/app
+
+test-backend:
+	cd $(BACKEND_DIR) && PYTHONPATH=app pytest -q
 
 docker-build:
 	docker build -t xfolder:latest .

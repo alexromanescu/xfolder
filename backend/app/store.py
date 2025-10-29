@@ -10,7 +10,7 @@ from collections import defaultdict
 import fnmatch
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set, Tuple
 
 from fastapi import HTTPException, status
 
@@ -265,8 +265,8 @@ class ScanManager:
             result = scanner.scan()
             similarity_groups = compute_similarity_groups(result.fingerprints, job.request.similarity_threshold)
 
-            for label in FolderLabel:
-                job.groups[label] = []
+            records_by_label: Dict[FolderLabel, List[GroupRecord]] = {label: [] for label in FolderLabel}
+            combined_records: List[Tuple[FolderLabel, GroupRecord]] = []
 
             for group in similarity_groups:
                 group_id, members, pairs, divergences = group_to_record(
@@ -274,16 +274,24 @@ class ScanManager:
                     FolderLabel.NEAR_DUPLICATE if group.max_similarity < 1.0 else FolderLabel.IDENTICAL,
                     result.fingerprints,
                 )
+                label = FolderLabel.NEAR_DUPLICATE if group.max_similarity < 1.0 else FolderLabel.IDENTICAL
                 record = GroupRecord(
                     group_id=group_id,
-                    label=FolderLabel.NEAR_DUPLICATE if group.max_similarity < 1.0 else FolderLabel.IDENTICAL,
+                    label=label,
                     canonical_path=members[0].path,
                     members=members,
                     pairwise_similarity=pairs,
                     divergences=divergences,
                     suppressed_descendants=False,
                 )
-                job.groups[record.label].append(record)
+                records_by_label[label].append(record)
+                combined_records.append((label, record))
+
+            filtered_records = _suppress_descendant_groups_all(combined_records)
+            for label in FolderLabel:
+                job.groups[label] = []
+            for label, record in filtered_records:
+                job.groups[label].append(record)
 
             job.result = result
             job.warnings = result.warnings
@@ -349,3 +357,51 @@ def _apply_filters(groups: List[GroupRecord], filters: ExportFilters) -> List[Gr
             continue
         filtered.append(group)
     return filtered
+
+
+def _suppress_descendant_groups_all(
+    records: List[Tuple[FolderLabel, GroupRecord]]
+) -> List[Tuple[FolderLabel, GroupRecord]]:
+    if not records:
+        return []
+
+    sorted_records = sorted(records, key=lambda item: _record_min_depth(item[1]))
+    kept: List[Tuple[FolderLabel, GroupRecord]] = []
+    ancestor_sets: List[Set[Path]] = []
+
+    for label, record in sorted_records:
+        member_paths = [member.path if isinstance(member.path, Path) else Path(member.path) for member in record.members]
+        if any(_all_members_descend(member_paths, ancestors) for ancestors in ancestor_sets):
+            continue
+        kept.append((label, record))
+        ancestor_sets.append(
+            {member.path if isinstance(member.path, Path) else Path(member.path) for member in record.members}
+        )
+
+    kept.sort(key=lambda item: (_record_min_depth(item[1]), str(item[1].canonical_path)))
+    return kept
+
+
+def _all_members_descend(members: List[Path], ancestors: set[Path]) -> bool:
+    for member in members:
+        if not any(_is_descendant_path(member, ancestor) for ancestor in ancestors):
+            return False
+    return True
+
+
+def _is_descendant_path(child: Path, parent: Path) -> bool:
+    try:
+        child.relative_to(parent)
+        return True
+    except ValueError:
+        return False
+
+
+def _record_min_depth(record: GroupRecord) -> int:
+    depths = []
+    for member in record.members:
+        rel = member.relative_path or "."
+        rel_path = Path(rel)
+        depth = 0 if rel_path == Path(".") else len(rel_path.parts)
+        depths.append(depth)
+    return min(depths) if depths else 0

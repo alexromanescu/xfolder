@@ -22,3 +22,21 @@ export function humanDuration(start?: string, end?: string): string {
   const hours = Math.floor(minutes / 60);
   return `${hours}h ${minutes % 60}m`;
 }
+
+export function relativePath(path: string, root: string): string {
+  if (!root) return path;
+  const normalize = (value: string) => value.replace(/\/+$/, "");
+  const normalizedRoot = normalize(root);
+  const normalizedPath = normalize(path);
+  if (!normalizedRoot) {
+    return normalizedPath || ".";
+  }
+  if (normalizedPath === normalizedRoot) {
+    return ".";
+  }
+  if (normalizedPath.startsWith(`${normalizedRoot}/`)) {
+    const result = normalizedPath.slice(normalizedRoot.length + 1);
+    return result || ".";
+  }
+  return path;
+}
