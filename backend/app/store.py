@@ -31,6 +31,7 @@ from .models import (
     GroupRecord,
     MemberContents,
     MismatchEntry,
+    PhaseProgress,
     ScanProgress,
     ScanRequest,
     ScanStatus,
@@ -116,25 +117,61 @@ class ScanManager:
         eta_seconds = None
         now = datetime.now(timezone.utc)
 
+        walking_ratio = None
+        scanned = stats_snapshot.get("folders_scanned", 0)
+        discovered = stats_snapshot.get("folders_discovered", 0)
+        discovered = max(discovered, scanned if scanned > 0 else 1)
+        if discovered > 0:
+            walking_ratio = scanned / discovered
+
         if job.status == ScanStatus.COMPLETED:
             progress = 1.0
             eta_seconds = 0
         elif job.status == ScanStatus.RUNNING:
-            scanned = stats_snapshot.get("folders_scanned", 0)
-            discovered = stats_snapshot.get("folders_discovered", 0)
-            discovered = max(discovered, scanned if scanned > 0 else 1)
-            if discovered > 0:
-                ratio = scanned / discovered
+            if walking_ratio is not None:
                 # Treat filesystem walking as ~90% of the work so the
                 # progress bar does not jump to 99% too early while
                 # grouping/similarity is still running.
-                progress = min(0.9, max(0.05, ratio * 0.9))
+                progress = min(0.9, max(0.05, walking_ratio * 0.9))
             elapsed = (now - job.started_at).total_seconds()
             if elapsed > 0 and scanned > 0:
                 rate = scanned / elapsed
                 remaining = max(discovered - scanned, 0)
                 if rate > 0:
                     eta_seconds = int(remaining / rate)
+
+        phases: List[PhaseProgress] = []
+        current_phase = job.meta.get("phase", "")
+        phase_names = ["walking", "aggregating", "grouping"]
+
+        def phase_status(name: str) -> tuple[str, float | None]:
+            if job.status == ScanStatus.COMPLETED:
+                return "completed", 1.0
+            if job.status == ScanStatus.PENDING:
+                return "pending", 0.0
+            if current_phase == name:
+                if name == "walking" and walking_ratio is not None:
+                    return "running", walking_ratio
+                return "running", None
+            # Determine ordering by index in phase_names
+            try:
+                idx = phase_names.index(name)
+                cur_idx = phase_names.index(current_phase) if current_phase in phase_names else -1
+            except ValueError:
+                return "pending", 0.0
+            if cur_idx > idx:
+                return "completed", 1.0
+            return "pending", 0.0
+
+        for name in phase_names:
+            status, phase_progress = phase_status(name)
+            phases.append(
+                PhaseProgress(
+                    name=name,
+                    status=status,
+                    progress=phase_progress,
+                )
+            )
 
         return ScanProgress(
             scan_id=job.scan_id,
@@ -148,6 +185,7 @@ class ScanManager:
             eta_seconds=eta_seconds,
             phase=job.meta.get("phase", ""),
             last_path=job.meta.get("last_path") or None,
+            phases=phases,
         )
 
     def get_groups(self, scan_id: str, label: Optional[FolderLabel] = None) -> List[GroupRecord]:

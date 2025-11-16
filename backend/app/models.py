@@ -98,6 +98,12 @@ class WarningRecord(BaseModel):
     message: str
 
 
+class PhaseProgress(BaseModel):
+    name: str
+    status: Literal["pending", "running", "completed"]
+    progress: Optional[float] = None
+
+
 class ScanProgress(BaseModel):
     scan_id: str
     status: ScanStatus
@@ -110,6 +116,7 @@ class ScanProgress(BaseModel):
     eta_seconds: Optional[int] = None
     phase: str = ""
     last_path: Optional[str] = None
+    phases: List[PhaseProgress] = Field(default_factory=list)
 
 
 class ExportFilters(BaseModel):

@@ -33,6 +33,13 @@ export interface ScanProgress {
   eta_seconds?: number | null;
   phase?: string;
   last_path?: string | null;
+  phases?: PhaseProgress[];
+}
+
+export interface PhaseProgress {
+  name: string;
+  status: "pending" | "running" | "completed";
+  progress?: number | null;
 }
 
 export interface FolderRecord {

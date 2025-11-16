@@ -434,6 +434,36 @@ export default function App() {
                 style={progressValue != null ? { width: `${Math.max(2, progressValue * 100)}%` } : undefined}
               />
             </div>
+            {currentScan?.phases?.length ? (
+              <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+                {currentScan.phases.map((phaseProgress) => {
+                  const label =
+                    phaseProgress.name === "walking"
+                      ? "Filesystem walk"
+                      : phaseProgress.name === "aggregating"
+                        ? "Aggregation"
+                        : phaseProgress.name === "grouping"
+                          ? "Grouping"
+                          : phaseProgress.name;
+                  const value = phaseProgress.progress ?? null;
+                  const isCompleted = phaseProgress.status === "completed";
+                  const isRunningPhase = phaseProgress.status === "running";
+                  return (
+                    <div key={phaseProgress.name} style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 8, alignItems: "center" }}>
+                      <div className="muted" style={{ fontSize: 13 }}>
+                        {isCompleted ? "✔" : isRunningPhase ? "●" : "○"} {label}
+                      </div>
+                      <div className={`progress-bar phase${value == null ? " indeterminate" : ""}`}>
+                        <div
+                          className={`progress-bar-fill${value == null ? " indeterminate" : ""}`}
+                          style={value != null ? { width: `${Math.max(2, value * 100)}%` } : undefined}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
           </div>
         ) : null}
 
