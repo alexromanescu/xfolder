@@ -60,6 +60,8 @@ services:
       - "8080:8080"
     environment:
       - XFS_CONFIG_PATH=/config
+      - XFS_LOG_LEVEL=INFO
+      - XFS_LOG_STREAM_ENABLED=1  # enable diagnostics drawer streaming
     volumes:
       - /host/data:/data:rw          # switch to :ro for read-only scans
       - /host/config:/config:rw

@@ -9,6 +9,8 @@ services:
       - XFS_CONFIG_PATH=/config
       - XFS_LISTEN_HOST=0.0.0.0
       - XFS_LISTEN_PORT=8080
+      - XFS_LOG_LEVEL=INFO
+      - XFS_LOG_STREAM_ENABLED=1
     volumes:
       - ${DATA_DIR:-/opt/xfolder/data}:/data:rw
       - ${CONFIG_DIR:-/opt/xfolder/config}:/config:rw

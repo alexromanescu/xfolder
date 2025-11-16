@@ -125,7 +125,10 @@ class ScanManager:
             discovered = max(discovered, scanned if scanned > 0 else 1)
             if discovered > 0:
                 ratio = scanned / discovered
-                progress = min(ratio, 0.99)
+                # Treat filesystem walking as ~90% of the work so the
+                # progress bar does not jump to 99% too early while
+                # grouping/similarity is still running.
+                progress = min(0.9, max(0.05, ratio * 0.9))
             elapsed = (now - job.started_at).total_seconds()
             if elapsed > 0 and scanned > 0:
                 rate = scanned / elapsed
@@ -266,7 +269,7 @@ class ScanManager:
         if not fingerprints:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Missing fingerprint data")
 
-        def build_contents(member: GroupRecord) -> MemberContents:
+        def build_contents(member: GroupRecord["members"][0]) -> MemberContents:
             fp = fingerprints.get(member.relative_path)
             if not fp:
                 entries: List[DiffEntry] = []
@@ -489,8 +492,15 @@ class ScanManager:
             job.status = ScanStatus.COMPLETED
             job.completed_at = datetime.now(timezone.utc)
         except Exception as exc:  # pylint: disable=broad-except
-            job.status = ScanStatus.FAILED
+            # Treat unexpected errors as warnings when we already
+            # have a partial result, instead of failing the entire
+            # scan. This keeps completed scans usable even if
+            # secondary steps (e.g., analytics) raise.
             job.completed_at = datetime.now(timezone.utc)
+            if job.result is not None:
+                job.status = ScanStatus.COMPLETED
+            else:
+                job.status = ScanStatus.FAILED
             job.error = str(exc)
             job.warnings.append(
                 WarningRecord(
