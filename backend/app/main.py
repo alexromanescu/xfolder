@@ -20,6 +20,7 @@ from .models import (
     DeletionResult,
     ExportFilters,
     FolderLabel,
+    GroupContents,
     GroupDiff,
     GroupRecord,
     ScanProgress,
@@ -162,6 +163,15 @@ def get_group_diff(
     manager: ScanManager = Depends(get_scan_manager),
 ) -> GroupDiff:
     return manager.get_group_diff(scan_id, group_id, left, right)
+
+
+@app.get("/api/scans/{scan_id}/groups/{group_id}/contents", response_model=GroupContents)
+def get_group_contents(
+    scan_id: str,
+    group_id: str,
+    manager: ScanManager = Depends(get_scan_manager),
+) -> GroupContents:
+    return manager.get_group_contents(scan_id, group_id)
 
 
 @app.get("/api/system/logs/stream")

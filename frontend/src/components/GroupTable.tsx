@@ -8,6 +8,8 @@ interface GroupTableProps {
   onToggle: (path: string) => void;
   emptyLabel: string;
   onCompare: (group: GroupRecord, member: string) => void;
+  onSelectGroup?: (group: GroupRecord) => void;
+  selectedGroupId?: string | null;
 }
 
 const labelClass: Record<string, string> = {
@@ -23,6 +25,8 @@ export function GroupTable({
   onToggle,
   emptyLabel,
   onCompare,
+  onSelectGroup,
+  selectedGroupId,
 }: GroupTableProps) {
   if (!groups.length) {
     return <p className="muted">{emptyLabel}</p>;
@@ -56,8 +60,9 @@ export function GroupTable({
             const reference = group.members[0];
             const referencePath = reference ? relativePath(reference.path, rootPath) : group.canonical_path;
             const isNearDuplicate = maxSimilarity < 1 - 1e-9;
+            const isSelected = group.group_id === selectedGroupId;
             return (
-              <tr key={group.group_id}>
+              <tr key={group.group_id} className={isSelected ? "selected" : ""}>
                 <td>
                   <span className={labelClass[group.label]}>
                     {group.label === "identical"
@@ -75,6 +80,16 @@ export function GroupTable({
                     </div>
                   ) : null}
                   <div className="muted">{group.group_id}</div>
+                  {onSelectGroup && group.members.length > 1 ? (
+                    <button
+                      type="button"
+                      className="button secondary compare-button"
+                      style={{ marginTop: 6 }}
+                      onClick={() => onSelectGroup(group)}
+                    >
+                      View comparison
+                    </button>
+                  ) : null}
                 </td>
                 <td>
                   <div className="muted">Select paths to quarantine</div>

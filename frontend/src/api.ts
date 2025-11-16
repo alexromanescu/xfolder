@@ -84,6 +84,22 @@ export interface GroupDiff {
   mismatched: MismatchEntry[];
 }
 
+export interface FolderEntry {
+  path: string;
+  bytes: number;
+}
+
+export interface MemberContents {
+  relative_path: string;
+  entries: FolderEntry[];
+}
+
+export interface GroupContents {
+  group_id: string;
+  canonical: MemberContents;
+  duplicates: MemberContents[];
+}
+
 export interface SimilarityMatrixEntry {
   group_id: string;
   label: FolderLabel;
@@ -239,5 +255,10 @@ export async function fetchSimilarityMatrix(
 
 export async function fetchTreemap(scanId: string): Promise<TreemapResponse> {
   const response = await api.get<TreemapResponse>(`/scans/${scanId}/density/treemap`);
+  return response.data;
+}
+
+export async function fetchGroupContents(scanId: string, groupId: string): Promise<GroupContents> {
+  const response = await api.get<GroupContents>(`/scans/${scanId}/groups/${groupId}/contents`);
   return response.data;
 }

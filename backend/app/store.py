@@ -25,8 +25,11 @@ from .models import (
     ExportFilters,
     ExportHeader,
     FolderLabel,
+    FolderEntry,
+    GroupContents,
     GroupDiff,
     GroupRecord,
+    MemberContents,
     MismatchEntry,
     ScanProgress,
     ScanRequest,
@@ -41,6 +44,7 @@ from .models import (
 from .scanner import (
     FolderScanner,
     ScanResult,
+    _identity_to_path,
     compute_fingerprint_diff,
     compute_similarity_groups,
     group_to_record,
@@ -240,6 +244,48 @@ class ScanManager:
             only_left=diff.only_left,
             only_right=diff.only_right,
             mismatched=diff.mismatched,
+        )
+
+    def get_group_contents(self, scan_id: str, group_id: str) -> GroupContents:
+        job = self.get_job(scan_id)
+        if job.status != ScanStatus.COMPLETED or not job.result:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Scan is not complete")
+
+        group_record: Optional[GroupRecord] = None
+        for groups in job.groups.values():
+            for record in groups:
+                if record.group_id == group_id:
+                    group_record = record
+                    break
+            if group_record:
+                break
+        if not group_record:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
+
+        fingerprints = job.result.fingerprints
+        if not fingerprints:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Missing fingerprint data")
+
+        def build_contents(member: GroupRecord) -> MemberContents:
+            fp = fingerprints.get(member.relative_path)
+            if not fp:
+                entries: List[DiffEntry] = []
+            else:
+                entries = [
+                    DiffEntry(path=_identity_to_path(identity), bytes=bytes_size)
+                    for identity, bytes_size in fp.file_weights.items()
+                ]
+            entries.sort(key=lambda entry: entry.path)
+            folder_entries = [FolderEntry(path=entry.path, bytes=entry.bytes) for entry in entries]
+            return MemberContents(relative_path=member.relative_path, entries=folder_entries)
+
+        canonical_contents = build_contents(group_record.members[0])
+        duplicate_contents = [build_contents(member) for member in group_record.members[1:]]
+
+        return GroupContents(
+            group_id=group_id,
+            canonical=canonical_contents,
+            duplicates=duplicate_contents,
         )
 
     def create_deletion_plan(self, scan_id: str, payload: DeletionPlanPayload) -> DeletionPlan:

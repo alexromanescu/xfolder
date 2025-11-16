@@ -17,6 +17,7 @@ This document tracks the automated and manual checks required to validate the Fo
 | T9 | Tree view rendering | Tree aggregates duplicate stats, honors search, and expand/collapse states. | *(Manual UI verification.)* |
 | T10 | Matrix adjacency projection | Similarity matrix flattens adjacency pairs in descending order. | `pytest -q tests/test_visualizations.py::test_similarity_matrix_entries_sorted` |
 | T11 | Duplicate-density treemap | Treemap aggregation rolls duplicate bytes up to ancestors. | `pytest -q tests/test_visualizations.py::test_treemap_rolls_up_duplicate_bytes` |
+| T12 | Frontend bootstrap | React app renders the landing state without runtime errors (catches use-before-init regressions). | `cd frontend && npm run test` |
 
 Run the full suite after changes:
 

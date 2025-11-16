@@ -5,6 +5,7 @@ import {
   FolderLabel,
   GroupDiff,
   GroupRecord,
+  GroupContents,
   ScanProgress,
   ScanRequest,
   SimilarityMatrixResponse,
@@ -15,6 +16,7 @@ import {
   createScan,
   exportGroups,
   fetchGroupDiff,
+  fetchGroupContents,
   fetchGroups,
   fetchScans,
   fetchSimilarityMatrix,
@@ -30,6 +32,7 @@ import { DensityTreemap } from "./components/DensityTreemap";
 import { DiagnosticsDrawer } from "./components/DiagnosticsDrawer";
 import { WarningsPanel } from "./components/WarningsPanel";
 import { DiffModal } from "./components/DiffModal";
+import { ComparisonPanel, ComparisonEntry } from "./components/ComparisonPanel";
 
 type GroupTab = FolderLabel;
 
@@ -60,6 +63,11 @@ export default function App() {
   const [treemapLoading, setTreemapLoading] = useState(false);
   const [insightTab, setInsightTab] = useState<"matrix" | "treemap">("matrix");
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [comparisonEntries, setComparisonEntries] = useState<ComparisonEntry[]>([]);
+  const [comparisonLoading, setComparisonLoading] = useState(false);
+  const [comparisonContents, setComparisonContents] = useState<GroupContents | null>(null);
+  const [showMatchingEntries, setShowMatchingEntries] = useState(true);
 
   const currentScan = useMemo<ScanProgress | null>(
     () => scans.find((item) => item.scan_id === selectedScanId) ?? (scans[0] ?? null),
@@ -76,6 +84,8 @@ export default function App() {
     setSelectedPaths(new Set<string>());
     setPlan(null);
     setPlanResult(null);
+    setSelectedGroupId(null);
+    setComparisonEntries([]);
   }, [currentScan?.scan_id]);
 
   useEffect(() => {
@@ -242,6 +252,10 @@ export default function App() {
     }
   };
 
+  const handleSelectGroup = useCallback((group: GroupRecord) => {
+    setSelectedGroupId(group.group_id);
+  }, []);
+
   const handleCompare = useCallback(
     async (group: GroupRecord, memberRelative: string) => {
       if (!currentScan) return;
@@ -286,6 +300,81 @@ export default function App() {
     activeTab === "identical"
       ? [...groupsByLabel.identical, ...groupsByLabel.near_duplicate]
       : groupsByLabel[activeTab] ?? [];
+
+  const allGroups = useMemo(
+    () => [...groupsByLabel.identical, ...groupsByLabel.near_duplicate, ...groupsByLabel.partial_overlap],
+    [groupsByLabel],
+  );
+  const selectedComparisonGroup = useMemo(() => {
+    if (!selectedGroupId) return null;
+    return allGroups.find((group) => group.group_id === selectedGroupId) ?? null;
+  }, [selectedGroupId, allGroups]);
+
+  useEffect(() => {
+    setComparisonEntries([]);
+    setComparisonContents(null);
+    if (!selectedComparisonGroup || selectedComparisonGroup.members.length < 2 || !currentScan) {
+      setComparisonLoading(false);
+      return;
+    }
+    const canonical = selectedComparisonGroup.members[0];
+    if (!canonical) {
+      setComparisonLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setComparisonLoading(true);
+    const load = async () => {
+      const entries = await Promise.all(
+        selectedComparisonGroup.members.slice(1).map(async (member) => {
+          try {
+            const diff = await fetchGroupDiff(
+              currentScan.scan_id,
+              selectedComparisonGroup.group_id,
+              canonical.relative_path,
+              member.relative_path,
+            );
+            return { member, diff };
+          } catch (cause) {
+            const message = cause instanceof Error ? cause.message : "Unable to load differences";
+            return { member, error: message };
+          }
+        }),
+      );
+      if (!cancelled) {
+        setComparisonEntries(entries);
+        setComparisonLoading(false);
+      }
+    };
+    load().catch(() => {
+      if (!cancelled) {
+        setComparisonEntries([]);
+        setComparisonLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedComparisonGroup, currentScan]);
+
+  useEffect(() => {
+    if (!selectedComparisonGroup || !currentScan) {
+      setComparisonContents(null);
+      return;
+    }
+    let cancelled = false;
+    fetchGroupContents(currentScan.scan_id, selectedComparisonGroup.group_id)
+      .then((response) => {
+        if (!cancelled) setComparisonContents(response);
+      })
+      .catch((cause) => {
+        console.error("Failed to fetch folder contents", cause);
+        if (!cancelled) setComparisonContents(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedComparisonGroup, currentScan]);
 
   const totalPotentialReclaim = useMemo(() => {
     if (!groupsByLabel.identical.length && !groupsByLabel.near_duplicate.length) return 0;
@@ -483,9 +572,16 @@ export default function App() {
                 onToggle={togglePath}
                 emptyLabel="No matches detected for this view yet."
                 onCompare={handleCompare}
+                onSelectGroup={handleSelectGroup}
+                selectedGroupId={selectedGroupId}
               />
             ) : (
-              <TreeView rootPath={currentScan.root_path} groups={currentGroups} />
+              <TreeView
+                rootPath={currentScan.root_path}
+                groups={currentGroups}
+                onSelectGroup={handleSelectGroup}
+                selectedGroupId={selectedGroupId}
+              />
             )}
             <div style={{ marginTop: 18, display: "flex", gap: 12 }}>
               <button
@@ -519,6 +615,17 @@ export default function App() {
             <p className="muted">Run a scan to populate this view.</p>
           </div>
         )}
+        {currentScan?.status === "completed" ? (
+          <ComparisonPanel
+            group={selectedComparisonGroup}
+            entries={comparisonEntries}
+            contents={comparisonContents}
+            loading={comparisonLoading}
+            showMatches={showMatchingEntries}
+            onToggleShowMatches={() => setShowMatchingEntries((prev) => !prev)}
+            onClear={() => setSelectedGroupId(null)}
+          />
+        ) : null}
 
         {currentScan?.status === "completed" ? (
           <div className="panel">

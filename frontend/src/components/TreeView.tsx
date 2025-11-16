@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { FolderLabel, GroupRecord } from "../api";
 import { humanBytes, relativePath } from "../format";
 
@@ -11,15 +11,14 @@ type Node = {
   near: number;
   reclaim: number;
   duplicateGroups: DuplicateGroup[];
+  group?: GroupRecord;
 };
 
 type MemberSummary = {
-  absolutePath: string;
   relativePath: string;
   totalBytes: number;
   fileCount: number;
   unstable: boolean;
-  fullPath: string;
 };
 
 type DuplicateGroup = {
@@ -32,21 +31,14 @@ type DuplicateGroup = {
 interface TreeViewProps {
   rootPath: string;
   groups: GroupRecord[];
+  onSelectGroup?: (group: GroupRecord) => void;
+  selectedGroupId?: string | null;
 }
 
-export function TreeView({ rootPath, groups }: TreeViewProps) {
-  const treeData = useMemo(() => buildTree(rootPath, groups), [rootPath, groups]);
-  const treeRoot = treeData.root;
-  const lookup = treeData.lookup;
+export function TreeView({ rootPath, groups, onSelectGroup, selectedGroupId }: TreeViewProps) {
+  const treeRoot = useMemo(() => buildTree(rootPath, groups), [rootPath, groups]);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(["/"]));
   const [query, setQuery] = useState("");
-  const [selectedPath, setSelectedPath] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (selectedPath && !lookup.has(selectedPath)) {
-      setSelectedPath(null);
-    }
-  }, [lookup, selectedPath]);
 
   const toggle = (key: string) => {
     setExpanded((prev) => {
@@ -79,19 +71,15 @@ export function TreeView({ rootPath, groups }: TreeViewProps) {
           expanded={expanded}
           onToggle={toggle}
           filter={query.trim()}
-          onSelect={setSelectedPath}
-          selectedPath={selectedPath}
+          onSelectGroup={onSelectGroup}
+          selectedGroupId={selectedGroupId}
         />
       </div>
-      <TreeSelectionDetails node={selectedPath ? lookup.get(selectedPath) ?? null : null} lookup={lookup} />
     </div>
   );
 }
 
-function buildTree(
-  rootPath: string,
-  groups: GroupRecord[],
-): { root: Node; lookup: Map<string, Node> } {
+function buildTree(rootPath: string, groups: GroupRecord[]): Node {
   const createNode = (name: string, fullPath: string): Node => ({
     name,
     fullPath,
@@ -103,24 +91,18 @@ function buildTree(
     duplicateGroups: [],
   });
   const root: Node = createNode(".", "/");
-  const lookup = new Map<string, Node>([[root.fullPath, root]]);
 
   const toRel = (abs: string) => relativePath(abs, rootPath);
 
   function ensure(path: string): Node {
     const normalized = path === "." ? "/" : path.startsWith("/") ? path : `/${path}`;
-    if (lookup.has(normalized)) {
-      return lookup.get(normalized)!;
-    }
     const parts = normalized === "/" ? [] : normalized.slice(1).split("/").filter(Boolean);
     let cur = root;
     let currentFull = "/";
     for (const part of parts) {
       const nextFull = currentFull === "/" ? `/${part}` : `${currentFull}/${part}`;
       if (!cur.children.has(part)) {
-        const node = createNode(part, nextFull);
-        cur.children.set(part, node);
-        lookup.set(nextFull, node);
+        cur.children.set(part, createNode(part, nextFull));
       }
       cur = cur.children.get(part)!;
       currentFull = nextFull;
@@ -134,6 +116,7 @@ function buildTree(
     const canonical = members[0];
     const canonicalRel = toRel(String(canonical.path));
     const canonicalNode = ensure(canonicalRel);
+    canonicalNode.group = group;
     canonicalNode.bytes = Math.max(canonicalNode.bytes, canonical.total_bytes);
     if (group.label === "identical") canonicalNode.identical += members.length - 1;
     else canonicalNode.near += members.length - 1;
@@ -141,16 +124,8 @@ function buildTree(
     for (const m of members.slice(1)) reclaim += m.total_bytes;
     canonicalNode.reclaim += reclaim;
 
-    const canonicalSummary = summarizeMember(canonical, canonicalNode.fullPath, canonicalRel);
-    const duplicateSummaries: MemberSummary[] = [];
-    for (const m of members.slice(1)) {
-      const rel = toRel(String(m.path));
-      const node = ensure(rel);
-      node.bytes = Math.max(node.bytes, m.total_bytes);
-      if (group.label === "identical") node.identical += 1;
-      else node.near += 1;
-      duplicateSummaries.push(summarizeMember(m, node.fullPath, rel));
-    }
+    const canonicalSummary = summarizeMember(canonical, canonicalRel);
+    const duplicateSummaries: MemberSummary[] = members.slice(1).map((member) => summarizeMember(member, toRel(String(member.path))));
     if (duplicateSummaries.length) {
       canonicalNode.duplicateGroups.push({
         groupId: group.group_id,
@@ -161,7 +136,7 @@ function buildTree(
     }
   }
 
-  return { root, lookup };
+  return root;
 }
 
 function expandAll(node: Node): Set<string> {
@@ -180,20 +155,20 @@ function TreeNode({
   expanded,
   onToggle,
   filter,
-  onSelect,
-  selectedPath,
+  onSelectGroup,
+  selectedGroupId,
 }: {
   node: Node;
   level: number;
   expanded: Set<string>;
   onToggle: (key: string) => void;
   filter: string;
-  onSelect: (path: string) => void;
-  selectedPath: string | null;
+  onSelectGroup?: (group: GroupRecord) => void;
+  selectedGroupId?: string | null;
 }) {
   const hasChildren = node.children.size > 0;
   const isOpen = expanded.has(node.fullPath);
-  const isSelected = selectedPath === node.fullPath;
+  const isSelected = node.group ? node.group.group_id === selectedGroupId : false;
 
   const matches = (value: string) => value.toLowerCase().includes(filter.toLowerCase());
   const matchesFilter = (current: Node): boolean => {
@@ -211,7 +186,9 @@ function TreeNode({
       <div
         className={`tree-row${isSelected ? " selected" : ""}`}
         style={{ paddingLeft: level * 18 }}
-        onClick={() => onSelect(node.fullPath)}
+        onClick={() => {
+          if (node.group && onSelectGroup) onSelectGroup(node.group);
+        }}
       >
         {hasChildren ? (
           <button
@@ -243,8 +220,8 @@ function TreeNode({
                 Group {group.groupId} · {group.label === "identical" ? "Identical" : "Near duplicate"}
               </div>
               <div className="duplicates-list">
-                {group.duplicates.map((dup) => (
-                  <div className="duplicate-row" key={`${group.groupId}-${dup.fullPath}`}>
+                {group.duplicates.map((dup, index) => (
+                  <div className="duplicate-row" key={`${group.groupId}-${index}`}>
                     <div>
                       {dup.relativePath}
                       <div className="muted">
@@ -270,8 +247,8 @@ function TreeNode({
               expanded={expanded}
               onToggle={onToggle}
               filter={filter}
-              onSelect={onSelect}
-              selectedPath={selectedPath}
+              onSelectGroup={onSelectGroup}
+              selectedGroupId={selectedGroupId}
             />
           ))
       ) : null}
@@ -279,106 +256,11 @@ function TreeNode({
   );
 }
 
-function TreeSelectionDetails({ node, lookup }: { node: Node | null; lookup: Map<string, Node> }) {
-  if (!node) {
-    return (
-      <div className="tree-selection-panel">
-        <p className="muted">Select a branch to compare duplicates.</p>
-      </div>
-    );
-  }
-  const readable = node.fullPath === "/" ? "." : node.fullPath.slice(1);
-
-  return (
-    <div className="tree-selection-panel">
-      <div className="panel-title">Branch comparison</div>
-      <p className="muted">Selected: {readable}</p>
-      {node.duplicateGroups.length ? (
-        node.duplicateGroups.map((group) => (
-          <div className="branch-section" key={group.groupId}>
-            <div className="branch-header">
-              <strong>{group.label === "identical" ? "Identical group" : "Near duplicate group"}</strong>
-              <span className="muted">Group {group.groupId}</span>
-            </div>
-            <div className="branch-grid">
-              <SubtreeCard title="Original" note={group.canonical.relativePath} node={lookup.get(group.canonical.fullPath)} />
-              {group.duplicates.map((dup) => (
-                <SubtreeCard
-                  key={`${group.groupId}-${dup.fullPath}`}
-                  title="Duplicate"
-                  note={dup.relativePath}
-                  node={lookup.get(dup.fullPath)}
-                />
-              ))}
-            </div>
-          </div>
-        ))
-      ) : (
-        <p className="muted">No duplicates tracked for this branch yet.</p>
-      )}
-    </div>
-  );
-}
-
-function SubtreeCard({ title, note, node }: { title: string; note: string; node: Node | undefined }) {
-  if (!node) {
-    return (
-      <div className="subtree-card">
-        <div className="subtree-title">{title}</div>
-        <p className="muted">Folder data unavailable.</p>
-      </div>
-    );
-  }
-  return (
-    <div className="subtree-card">
-      <div className="subtree-title">{title}</div>
-      <div className="muted">{note || "."}</div>
-      <div className="subtree-list">
-        <StaticBranch node={node} base={node.fullPath} depth={0} />
-      </div>
-    </div>
-  );
-}
-
-const MAX_BRANCH_DEPTH = 4;
-
-function StaticBranch({ node, base, depth }: { node: Node; base: string; depth: number }) {
-  const relativeName = toRelativeName(node.fullPath, base);
-  const children = Array.from(node.children.values()).sort((a, b) => a.name.localeCompare(b.name));
-  return (
-    <div className="subtree-node">
-      <div className="subtree-row" style={{ paddingLeft: depth * 16 }}>
-        <span>{relativeName}</span>
-        <span>{humanBytes(node.bytes)}</span>
-      </div>
-      {depth < MAX_BRANCH_DEPTH && children.length ? (
-        children.map((child) => <StaticBranch key={child.fullPath} node={child} base={base} depth={depth + 1} />)
-      ) : null}
-      {depth === MAX_BRANCH_DEPTH && children.length ? <div className="muted subtree-row" style={{ paddingLeft: (depth + 1) * 16 }}>…</div> : null}
-    </div>
-  );
-}
-
-function summarizeMember(
-  record: GroupRecord["members"][number],
-  fullPath: string,
-  relative: string,
-): MemberSummary {
+function summarizeMember(record: GroupRecord["members"][number], relative: string): MemberSummary {
   return {
-    absolutePath: String(record.path),
     relativePath: relative,
     totalBytes: record.total_bytes,
     fileCount: record.file_count,
     unstable: record.unstable,
-    fullPath,
   };
-}
-
-function toRelativeName(fullPath: string, base: string): string {
-  if (fullPath === base) return ".";
-  const prefix = base === "/" ? "/" : `${base}/`;
-  if (fullPath.startsWith(prefix)) {
-    return fullPath.slice(prefix.length) || ".";
-  }
-  return fullPath === "/" ? "." : fullPath.slice(1);
 }

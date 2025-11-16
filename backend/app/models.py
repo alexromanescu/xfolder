@@ -216,6 +216,22 @@ class LogEntry(BaseModel):
     logger: str
 
 
+class FolderEntry(BaseModel):
+    path: str
+    bytes: int
+
+
+class MemberContents(BaseModel):
+    relative_path: str
+    entries: List[FolderEntry]
+
+
+class GroupContents(BaseModel):
+    group_id: str
+    canonical: MemberContents
+    duplicates: List[MemberContents]
+
+
 @dataclass
 class DirectoryFingerprint:
     folder: FolderRecord
