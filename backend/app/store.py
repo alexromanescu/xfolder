@@ -14,6 +14,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from fastapi import HTTPException, status
 
+from .analytics import build_similarity_matrix, build_treemap
 from .cache import FileHashCache
 from .config import AppConfig
 from .models import (
@@ -30,6 +31,10 @@ from .models import (
     ScanProgress,
     ScanRequest,
     ScanStatus,
+    SimilarityMatrixEntry,
+    SimilarityMatrixResponse,
+    TreemapNode,
+    TreemapResponse,
     WarningRecord,
     WarningType,
 )
@@ -60,6 +65,8 @@ class ScanJob:
         self.groups: Dict[FolderLabel, List[GroupRecord]] = defaultdict(list)
         self.error: Optional[str] = None
         self.meta: Dict[str, str] = {"phase": "", "last_path": ""}
+        self.matrix_entries: List[SimilarityMatrixEntry] = []
+        self.treemap: Optional[TreemapNode] = None
 
 
 class ScanManager:
@@ -146,6 +153,50 @@ class ScanManager:
         for records in job.groups.values():
             groups.extend(records)
         return groups
+
+    def get_similarity_matrix(
+        self,
+        scan_id: str,
+        *,
+        min_similarity: float,
+        limit: int,
+        offset: int,
+    ) -> SimilarityMatrixResponse:
+        job = self.get_job(scan_id)
+        if job.status != ScanStatus.COMPLETED:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Scan is not complete")
+        entries = [entry for entry in job.matrix_entries if entry.similarity >= min_similarity]
+        total = len(entries)
+        window = entries[offset : offset + limit]
+        return SimilarityMatrixResponse(
+            scan_id=scan_id,
+            generated_at=datetime.now(timezone.utc),
+            root_path=job.request.root_path,
+            min_similarity=min_similarity,
+            total_entries=total,
+            entries=window,
+        )
+
+    def get_treemap(self, scan_id: str) -> TreemapResponse:
+        job = self.get_job(scan_id)
+        if job.status != ScanStatus.COMPLETED:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Scan is not complete")
+        if not job.treemap:
+            job.treemap = TreemapNode(
+                path=".",
+                name=job.request.root_path.name or ".",
+                total_bytes=0,
+                duplicate_bytes=0,
+                identical_groups=0,
+                near_groups=0,
+                children=[],
+            )
+        return TreemapResponse(
+            scan_id=scan_id,
+            generated_at=datetime.now(timezone.utc),
+            root_path=job.request.root_path,
+            tree=job.treemap,
+        )
 
     def get_group_diff(
         self,
@@ -379,6 +430,12 @@ class ScanManager:
                 job.groups[label] = []
             for label, record in filtered_records:
                 job.groups[label].append(record)
+
+            job.matrix_entries = build_similarity_matrix(filtered_records)
+            root_label = job.request.root_path.name or job.request.root_path.as_posix()
+            root_fingerprint = result.fingerprints.get(".")
+            root_bytes = root_fingerprint.folder.total_bytes if root_fingerprint else 0
+            job.treemap = build_treemap(filtered_records, root_label=root_label, root_bytes=root_bytes)
 
             job.result = result
             job.warnings = result.warnings

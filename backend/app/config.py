@@ -49,15 +49,20 @@ class AppConfig(BaseModel):
     listen_port: int = Field(default=8080)
     config_path: Path = Field(default=Path("/config"))
     cache_db_path: Path | None = None
+    log_level: str = Field(default="INFO")
+    log_stream_enabled: bool = Field(default=False)
 
     @classmethod
     def from_env(cls) -> "AppConfig":
         root = os.getenv("XFS_CONFIG_PATH", "/config")
         cache = os.getenv("XFS_CACHE_DB")
+        log_level = os.getenv("XFS_LOG_LEVEL", "INFO").upper()
+        log_stream = os.getenv("XFS_LOG_STREAM_ENABLED", "0") in {"1", "true", "TRUE"}
         return cls(
             listen_host=os.getenv("XFS_LISTEN_HOST", "0.0.0.0"),
             listen_port=int(os.getenv("XFS_LISTEN_PORT", "8080")),
             config_path=Path(root).expanduser().resolve(),
             cache_db_path=Path(cache).expanduser().resolve() if cache else None,
+            log_level=log_level,
+            log_stream_enabled=log_stream,
         )
-

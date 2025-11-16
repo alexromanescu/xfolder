@@ -172,7 +172,54 @@ class GroupDiff(BaseModel):
     mismatched: List[MismatchEntry]
 
 
+class SimilarityMatrixEntry(BaseModel):
+    group_id: str
+    label: FolderLabel
+    left: FolderRecord
+    right: FolderRecord
+    similarity: float
+    combined_bytes: int
+    reclaimable_bytes: int
+
+
+class SimilarityMatrixResponse(BaseModel):
+    scan_id: str
+    generated_at: datetime
+    root_path: Path
+    min_similarity: float
+    total_entries: int
+    entries: List[SimilarityMatrixEntry]
+
+
+class TreemapNode(BaseModel):
+    path: str
+    name: str
+    total_bytes: int
+    duplicate_bytes: int
+    identical_groups: int
+    near_groups: int
+    children: List["TreemapNode"] = Field(default_factory=list)
+
+
+class TreemapResponse(BaseModel):
+    scan_id: str
+    generated_at: datetime
+    root_path: Path
+    tree: TreemapNode
+
+
+class LogEntry(BaseModel):
+    timestamp: datetime
+    level: str
+    level_no: int
+    message: str
+    logger: str
+
+
 @dataclass
 class DirectoryFingerprint:
     folder: FolderRecord
     file_weights: Dict[str, int]
+
+
+TreemapNode.update_forward_refs()

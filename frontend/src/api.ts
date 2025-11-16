@@ -1,4 +1,4 @@
-import axios, { AxiosResponse } from "axios";
+import axios from "axios";
 
 export type ScanStatus = "pending" | "running" | "completed" | "failed";
 export type FolderLabel = "identical" | "near_duplicate" | "partial_overlap";
@@ -84,6 +84,42 @@ export interface GroupDiff {
   mismatched: MismatchEntry[];
 }
 
+export interface SimilarityMatrixEntry {
+  group_id: string;
+  label: FolderLabel;
+  left: FolderRecord;
+  right: FolderRecord;
+  similarity: number;
+  combined_bytes: number;
+  reclaimable_bytes: number;
+}
+
+export interface SimilarityMatrixResponse {
+  scan_id: string;
+  generated_at: string;
+  root_path: string;
+  min_similarity: number;
+  total_entries: number;
+  entries: SimilarityMatrixEntry[];
+}
+
+export interface TreemapNode {
+  path: string;
+  name: string;
+  total_bytes: number;
+  duplicate_bytes: number;
+  identical_groups: number;
+  near_groups: number;
+  children: TreemapNode[];
+}
+
+export interface TreemapResponse {
+  scan_id: string;
+  generated_at: string;
+  root_path: string;
+  tree: TreemapNode;
+}
+
 export interface DeletionPlan {
   plan_id: string;
   token: string;
@@ -100,6 +136,14 @@ export interface DeletionResult {
   bytes_moved: number;
   root: string;
   quarantine_root: string;
+}
+
+export interface LogEntry {
+  timestamp: string;
+  level: string;
+  level_no: number;
+  message: string;
+  logger: string;
 }
 
 const api = axios.create({
@@ -174,5 +218,26 @@ export async function fetchGroupDiff(
   const response = await api.get<GroupDiff>(`/scans/${scanId}/groups/${groupId}/diff`, {
     params: { left, right },
   });
+  return response.data;
+}
+
+interface MatrixParams {
+  min_similarity?: number;
+  limit?: number;
+  offset?: number;
+}
+
+export async function fetchSimilarityMatrix(
+  scanId: string,
+  params?: MatrixParams,
+): Promise<SimilarityMatrixResponse> {
+  const response = await api.get<SimilarityMatrixResponse>(`/scans/${scanId}/matrix`, {
+    params,
+  });
+  return response.data;
+}
+
+export async function fetchTreemap(scanId: string): Promise<TreemapResponse> {
+  const response = await api.get<TreemapResponse>(`/scans/${scanId}/density/treemap`);
   return response.data;
 }

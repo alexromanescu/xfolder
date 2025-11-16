@@ -15,6 +15,8 @@ This document tracks the automated and manual checks required to validate the Fo
 | T7 | Diff endpoint | `GET /api/scans/{scan_id}/groups/{group_id}/diff` returns `only_left`, `only_right`, and `mismatched` entries for near duplicates. | *(Add dedicated API test when backend suite expands beyond unit scope.)* |
 | T8 | Progress telemetry | Scan progress includes `phase` and `last_path`; stats update during scan. | *(Manual/API check: `GET /api/scans` while scan runs.)* |
 | T9 | Tree view rendering | Tree aggregates duplicate stats, honors search, and expand/collapse states. | *(Manual UI verification.)* |
+| T10 | Matrix adjacency projection | Similarity matrix flattens adjacency pairs in descending order. | `pytest -q tests/test_visualizations.py::test_similarity_matrix_entries_sorted` |
+| T11 | Duplicate-density treemap | Treemap aggregation rolls duplicate bytes up to ancestors. | `pytest -q tests/test_visualizations.py::test_treemap_rolls_up_duplicate_bytes` |
 
 Run the full suite after changes:
 
@@ -30,6 +32,9 @@ PYTHONPATH=app pytest -q
 - **Progress view**: While a scan runs, confirm folder/file counters increment, phase/last-path update, progress bar advances, and ETA updates.
 - **Diff modal**: On a near-duplicate entry, hit **Compare** and verify the modal lists “only in” paths and mismatched sizes.
 - **Tree view**: Toggle to Tree, expand nodes, use search, and confirm stats/badges match expectations.
+- **Similarity matrix view**: Switch to the Visual Insights → Matrix tab, hover entries, and confirm the percentage, reclaimable bytes, and group ids align with the table view.
+- **Duplicate-density treemap**: Switch to the Visual Insights → Treemap tab, ensure the bars roughly match duplicate-heavy folders, and clicking between scans refreshes the hierarchy.
+- **Diagnostics drawer**: Open Diagnostics from the header, confirm live logs stream (or that a helpful error message appears if streaming is disabled), and close the drawer.
 - **Local scan smoke test**:
   1. Mount the target root (bind SMB/NFS via the host OS).
   2. `cd backend && source .venv/bin/activate`  

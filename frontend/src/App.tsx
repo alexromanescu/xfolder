@@ -7,6 +7,8 @@ import {
   GroupRecord,
   ScanProgress,
   ScanRequest,
+  SimilarityMatrixResponse,
+  TreemapResponse,
   WarningRecord,
   confirmDeletionPlan,
   createDeletionPlan,
@@ -15,12 +17,17 @@ import {
   fetchGroupDiff,
   fetchGroups,
   fetchScans,
+  fetchSimilarityMatrix,
+  fetchTreemap,
 } from "./api";
 import { formatDate, humanBytes, humanDuration, formatEta } from "./format";
 import { MetricCard } from "./components/MetricCard";
 import { ScanForm } from "./components/ScanForm";
 import { GroupTable } from "./components/GroupTable";
 import { TreeView } from "./components/TreeView";
+import { SimilarityMatrixView } from "./components/SimilarityMatrix";
+import { DensityTreemap } from "./components/DensityTreemap";
+import { DiagnosticsDrawer } from "./components/DiagnosticsDrawer";
 import { WarningsPanel } from "./components/WarningsPanel";
 import { DiffModal } from "./components/DiffModal";
 
@@ -47,6 +54,12 @@ export default function App() {
   const [diffOpen, setDiffOpen] = useState(false);
   const [diffLoading, setDiffLoading] = useState(false);
   const [diffData, setDiffData] = useState<GroupDiff | undefined>(undefined);
+  const [matrix, setMatrix] = useState<SimilarityMatrixResponse | null>(null);
+  const [matrixLoading, setMatrixLoading] = useState(false);
+  const [treemap, setTreemap] = useState<TreemapResponse | null>(null);
+  const [treemapLoading, setTreemapLoading] = useState(false);
+  const [insightTab, setInsightTab] = useState<"matrix" | "treemap">("matrix");
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
 
   const currentScan = useMemo<ScanProgress | null>(
     () => scans.find((item) => item.scan_id === selectedScanId) ?? (scans[0] ?? null),
@@ -124,6 +137,44 @@ export default function App() {
     };
   }, [currentScan]);
 
+  useEffect(() => {
+    if (!currentScan || currentScan.status !== "completed") {
+      setMatrix(null);
+      setTreemap(null);
+      return;
+    }
+    let cancelled = false;
+    setMatrixLoading(true);
+    setTreemapLoading(true);
+    fetchSimilarityMatrix(currentScan.scan_id, { min_similarity: 0.6, limit: 250 })
+      .then((response) => {
+        if (!cancelled) setMatrix(response);
+      })
+      .catch((cause) => {
+        console.error("Failed to fetch matrix", cause);
+        if (!cancelled) setMatrix(null);
+      })
+      .finally(() => {
+        if (!cancelled) setMatrixLoading(false);
+      });
+
+    fetchTreemap(currentScan.scan_id)
+      .then((response) => {
+        if (!cancelled) setTreemap(response);
+      })
+      .catch((cause) => {
+        console.error("Failed to fetch treemap", cause);
+        if (!cancelled) setTreemap(null);
+      })
+      .finally(() => {
+        if (!cancelled) setTreemapLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentScan]);
+
   const handleScanLaunch = useCallback(
     async (payload: ScanRequest) => {
       setError(null);
@@ -191,6 +242,31 @@ export default function App() {
     }
   };
 
+  const handleCompare = useCallback(
+    async (group: GroupRecord, memberRelative: string) => {
+      if (!currentScan) return;
+      setDiffOpen(true);
+      setDiffLoading(true);
+      setDiffData(undefined);
+      try {
+        const diff = await fetchGroupDiff(
+          currentScan.scan_id,
+          group.group_id,
+          group.members[0].relative_path,
+          memberRelative,
+        );
+        setDiffData(diff);
+      } catch (cause) {
+        console.error("Failed to load diff", cause);
+        setDiffData(undefined);
+        setError("Unable to load comparison diff. See server logs for details.");
+      } finally {
+        setDiffLoading(false);
+      }
+    },
+    [currentScan],
+  );
+
   const handleConfirmPlan = async () => {
     if (!plan) return;
     try {
@@ -233,11 +309,18 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <h1>Folder Similarity Scanner</h1>
-        <p>
-          Discover duplicate and near-identical folder structures, export reports, and reclaim disk
-          space with a guarded deletion workflow.
-        </p>
+        <div className="header-content">
+          <div>
+            <h1>Folder Similarity Scanner</h1>
+            <p>
+              Discover duplicate and near-identical folder structures, export reports, and reclaim disk
+              space with a guarded deletion workflow.
+            </p>
+          </div>
+          <button className="button secondary" type="button" onClick={() => setDiagnosticsOpen(true)}>
+            Diagnostics
+          </button>
+        </div>
       </header>
       <main className="app-content">
         <ScanForm onSubmit={handleScanLaunch} busy={loadingScan} />
@@ -437,6 +520,30 @@ export default function App() {
           </div>
         )}
 
+        {currentScan?.status === "completed" ? (
+          <div className="panel">
+            <div className="panel-header">
+              <div>
+                <div className="panel-title">Visual Insights</div>
+                <p className="muted">Inspect adjacency heatmaps or the duplicate-density treemap.</p>
+              </div>
+            </div>
+            <div className="tab-strip">
+              <div className={`tab ${insightTab === "matrix" ? "active" : ""}`} onClick={() => setInsightTab("matrix")}>
+                Matrix
+              </div>
+              <div className={`tab ${insightTab === "treemap" ? "active" : ""}`} onClick={() => setInsightTab("treemap")}>
+                Treemap
+              </div>
+            </div>
+            {insightTab === "matrix" ? (
+              <SimilarityMatrixView entries={matrix?.entries ?? []} loading={matrixLoading} />
+            ) : (
+              <DensityTreemap tree={treemap?.tree ?? null} loading={treemapLoading} />
+            )}
+          </div>
+        ) : null}
+
         <WarningsPanel warnings={currentWarnings} />
 
         {error ? (
@@ -454,6 +561,7 @@ export default function App() {
             setDiffData(undefined);
           }}
         />
+        <DiagnosticsDrawer open={diagnosticsOpen} onClose={() => setDiagnosticsOpen(false)} />
       </main>
     </div>
   );
@@ -497,24 +605,3 @@ function statsEqual(
   }
   return true;
 }
-  const handleCompare = async (group: GroupRecord, memberRelative: string) => {
-    if (!currentScan) return;
-    setDiffOpen(true);
-    setDiffLoading(true);
-    setDiffData(undefined);
-    try {
-      const diff = await fetchGroupDiff(
-        currentScan.scan_id,
-        group.group_id,
-        group.members[0].relative_path,
-        memberRelative,
-      );
-      setDiffData(diff);
-    } catch (cause) {
-      console.error("Failed to load diff", cause);
-      setDiffData(undefined);
-      setError("Unable to load comparison diff. See server logs for details.");
-    } finally {
-      setDiffLoading(false);
-    }
-  };

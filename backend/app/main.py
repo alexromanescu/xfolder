@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import logging
+import asyncio
+import json
 from pathlib import Path
 from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import AppConfig
+from .logstream import LogStreamHandler
 from .models import (
     ConfirmDeletionPayload,
     DeletionPlan,
@@ -21,12 +24,22 @@ from .models import (
     GroupRecord,
     ScanProgress,
     ScanRequest,
+    SimilarityMatrixResponse,
+    TreemapResponse,
 )
 from .store import ScanManager
 
 logger = logging.getLogger("xfolder")
 
 config = AppConfig.from_env()
+logging.basicConfig(level=getattr(logging, config.log_level.upper(), logging.INFO))
+logger.setLevel(getattr(logging, config.log_level.upper(), logging.INFO))
+
+log_stream_handler: Optional[LogStreamHandler] = None
+if config.log_stream_enabled:
+    log_stream_handler = LogStreamHandler()
+    logger.addHandler(log_stream_handler)
+
 config.config_path.mkdir(parents=True, exist_ok=True)
 scan_manager = ScanManager(config)
 
@@ -78,6 +91,25 @@ def get_groups(
     manager: ScanManager = Depends(get_scan_manager),
 ) -> list[GroupRecord]:
     return manager.get_groups(scan_id, label)
+
+
+@app.get("/api/scans/{scan_id}/matrix", response_model=SimilarityMatrixResponse)
+def get_similarity_matrix(
+    scan_id: str,
+    min_similarity: float = Query(default=0.5, ge=0.0, le=1.0),
+    limit: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    manager: ScanManager = Depends(get_scan_manager),
+) -> SimilarityMatrixResponse:
+    return manager.get_similarity_matrix(scan_id, min_similarity=min_similarity, limit=limit, offset=offset)
+
+
+@app.get("/api/scans/{scan_id}/density/treemap", response_model=TreemapResponse)
+def get_density_treemap(
+    scan_id: str,
+    manager: ScanManager = Depends(get_scan_manager),
+) -> TreemapResponse:
+    return manager.get_treemap(scan_id)
 
 
 @app.post("/api/scans/{scan_id}/export")
@@ -132,6 +164,29 @@ def get_group_diff(
     return manager.get_group_diff(scan_id, group_id, left, right)
 
 
+@app.get("/api/system/logs/stream")
+async def stream_logs(level: Optional[str] = Query(default=None)):
+    if not config.log_stream_enabled or not log_stream_handler:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Log streaming disabled")
+    requested = (level or config.log_level).upper()
+    min_level = getattr(logging, requested, logging.INFO)
+    subscriber = log_stream_handler.subscribe()
+
+    async def event_generator():
+        queue, loop = subscriber
+        try:
+            for entry in log_stream_handler.history(min_level):
+                yield _format_sse(entry)
+            while True:
+                entry = await queue.get()
+                if entry.level_no >= min_level:
+                    yield _format_sse(entry)
+        finally:
+            log_stream_handler.unsubscribe((queue, loop))
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):  # type: ignore[override]
     logger.exception("Unhandled exception on %s: %s", request.url, exc)
@@ -144,3 +199,8 @@ async def global_exception_handler(request, exc):  # type: ignore[override]
 frontend_path = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 if frontend_path.exists():
     app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
+
+
+def _format_sse(entry) -> str:
+    payload = json.dumps(entry.dict())
+    return f"data: {payload}\n\n"
