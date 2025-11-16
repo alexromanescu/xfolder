@@ -47,10 +47,12 @@ class FolderScanner:
         request: ScanRequest,
         cache: Optional[FileHashCache] = None,
         stats_sink: Optional[Dict[str, int]] = None,
+        meta_sink: Optional[Dict[str, str]] = None,
     ) -> None:
         self.request = request
         self.cache = cache
         self._stats_sink = stats_sink
+        self._meta_sink = meta_sink
         self._warnings: List[WarningRecord] = []
         self._stats: Dict[str, int] = defaultdict(int)
         self._seen_inodes: Set[Tuple[int, int]] = set()
@@ -73,6 +75,8 @@ class FolderScanner:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             for dirpath, dirnames, filenames in os.walk(root):
                 current = Path(dirpath)
+                if getattr(self, "_meta_sink", None) is not None:
+                    self._meta_sink["last_path"] = str(current)
                 rel_dir = current.relative_to(root)
                 if self._is_excluded(rel_dir):
                     dirnames[:] = []
@@ -93,6 +97,8 @@ class FolderScanner:
                 unstable = False
                 futures = []
                 for filename in filenames:
+                    if getattr(self, "_meta_sink", None) is not None:
+                        self._meta_sink["last_path"] = str(current / filename)
                     futures.append(executor.submit(self._process_file, current, filename, rel_dir))
                 for future in futures:
                     record, file_unstable = future.result()
@@ -116,6 +122,8 @@ class FolderScanner:
                 self._set_stat("folders_scanned", len(folders))
 
         self._stats["folders_scanned"] = len(folders)
+        if getattr(self, "_meta_sink", None) is not None:
+            self._meta_sink["phase"] = "aggregating"
         fingerprints = aggregate_fingerprints(fingerprints)
         return ScanResult(
             folders=folders,

@@ -59,6 +59,7 @@ class ScanJob:
         self.result: Optional[ScanResult] = None
         self.groups: Dict[FolderLabel, List[GroupRecord]] = defaultdict(list)
         self.error: Optional[str] = None
+        self.meta: Dict[str, str] = {"phase": "", "last_path": ""}
 
 
 class ScanManager:
@@ -131,6 +132,8 @@ class ScanManager:
             stats=stats_snapshot,
             progress=progress,
             eta_seconds=eta_seconds,
+            phase=job.meta.get("phase", ""),
+            last_path=job.meta.get("last_path") or None,
         )
 
     def get_groups(self, scan_id: str, label: Optional[FolderLabel] = None) -> List[GroupRecord]:
@@ -343,8 +346,10 @@ class ScanManager:
     def _run_scan(self, job: ScanJob) -> None:
         job.status = ScanStatus.RUNNING
         try:
-            scanner = FolderScanner(job.request, cache=self.file_cache, stats_sink=job.stats)
+            job.meta["phase"] = "walking"
+            scanner = FolderScanner(job.request, cache=self.file_cache, stats_sink=job.stats, meta_sink=job.meta)
             result = scanner.scan()
+            job.meta["phase"] = "grouping"
             similarity_groups = compute_similarity_groups(result.fingerprints, job.request.similarity_threshold)
 
             records_by_label: Dict[FolderLabel, List[GroupRecord]] = {label: [] for label in FolderLabel}

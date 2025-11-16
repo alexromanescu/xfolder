@@ -31,6 +31,8 @@ export interface ScanProgress {
   stats: Record<string, number>;
   progress?: number | null;
   eta_seconds?: number | null;
+  phase?: string;
+  last_path?: string | null;
 }
 
 export interface FolderRecord {

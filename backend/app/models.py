@@ -108,6 +108,8 @@ class ScanProgress(BaseModel):
     stats: Dict[str, int] = Field(default_factory=dict)
     progress: Optional[float] = None
     eta_seconds: Optional[int] = None
+    phase: str = ""
+    last_path: Optional[str] = None
 
 
 class ExportFilters(BaseModel):

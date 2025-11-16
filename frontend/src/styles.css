@@ -457,6 +457,108 @@ select:focus {
   letter-spacing: 0.06em;
 }
 
+.tree-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tree-controls {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tree-controls input {
+  flex: 1;
+  min-width: 200px;
+}
+
+.tree-container {
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.4);
+  max-height: 520px;
+  overflow: auto;
+}
+
+.tree-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+}
+
+.tree-toggle {
+  border: none;
+  background: transparent;
+  color: var(--text-500);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.tree-spacer {
+  width: 1em;
+}
+
+.tree-path {
+  color: var(--text-100);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-metrics {
+  color: var(--text-500);
+  font-size: 13px;
+}
+
+.tree-badges {
+  display: inline-flex;
+  gap: 6px;
+  justify-self: end;
+}
+
+/* Tree view */
+.tree-container {
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(15, 23, 42, 0.4);
+}
+.tree-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+}
+.tree-toggle {
+  border: none;
+  background: transparent;
+  color: var(--text-500);
+  cursor: pointer;
+}
+.tree-spacer {
+  display: inline-block;
+  width: 1.2em;
+}
+.tree-path {
+  color: var(--text-100);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tree-metrics {
+  color: var(--text-500);
+}
+.tree-badges {
+  display: inline-flex;
+  gap: 8px;
+  justify-self: end;
+}
+
 .progress-bar {
   position: relative;
   height: 12px;

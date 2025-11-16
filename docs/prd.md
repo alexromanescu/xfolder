@@ -132,6 +132,11 @@ Non-goals: cross-machine synchronization, deduplicating storage at the filesyste
   - REST endpoint `GET /api/scans/{scan_id}/groups/{group_id}/diff` returns a diff tree with `only_left`, `only_right`, and `mismatched` entries derived from aggregated fingerprints.
   - UI exposes a “Compare” action for near-duplicate members; modal renders side-by-side differences with byte sizes.
 
+### 10.1 View Enhancements (Post-v2.1)
+- **Tree View**: Similarity Groups now offer a List/Tree switch. The tree aggregates duplicate stats per folder (bytes, identical/near counts, reclaimable bytes) and supports search + expand/collapse for large hierarchies.
+- **Progress Telemetry**: Scan progress panel streams phase (`walking`, `aggregating`, `grouping`), last processed path, and ETA derived from folders discovered versus scanned.
+- **Diff Workflow**: Compare modal integrates with the diff API so users can inspect folder-level differences before acting.
+
 ---
 
 ## 11. Deletion Workflow

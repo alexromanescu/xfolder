@@ -13,6 +13,8 @@ This document tracks the automated and manual checks required to validate the Fo
 | T5 | Parent consolidation (identical) | `R/X/{A,B}` vs `R/Y/{A,B}`: only `X` and `Y` surface, totals include descendants. | `pytest -q tests/test_similarity_groups.py::test_parent_supersedes_children` |
 | T6 | Parent consolidation (near duplicate) | Near-identical parents with variant child (`media` vs `media_abstract`) surface once; child identical groups suppressed. | `pytest -q tests/test_similarity_groups.py::test_near_duplicate_parent_suppresses_child_identical` |
 | T7 | Diff endpoint | `GET /api/scans/{scan_id}/groups/{group_id}/diff` returns `only_left`, `only_right`, and `mismatched` entries for near duplicates. | *(Add dedicated API test when backend suite expands beyond unit scope.)* |
+| T8 | Progress telemetry | Scan progress includes `phase` and `last_path`; stats update during scan. | *(Manual/API check: `GET /api/scans` while scan runs.)* |
+| T9 | Tree view rendering | Tree aggregates duplicate stats, honors search, and expand/collapse states. | *(Manual UI verification.)* |
 
 Run the full suite after changes:
 
@@ -25,8 +27,9 @@ PYTHONPATH=app pytest -q
 ## 2. Manual Validation Checklist
 
 - **Frontend build parity**: `cd frontend && npm run build` should pass (catches TypeScript/React integration issues).
-- **Progress view**: While a scan runs, confirm folder/file counters increment, progress bar advances, and ETA updates.
+- **Progress view**: While a scan runs, confirm folder/file counters increment, phase/last-path update, progress bar advances, and ETA updates.
 - **Diff modal**: On a near-duplicate entry, hit **Compare** and verify the modal lists “only in” paths and mismatched sizes.
+- **Tree view**: Toggle to Tree, expand nodes, use search, and confirm stats/badges match expectations.
 - **Local scan smoke test**:
   1. Mount the target root (bind SMB/NFS via the host OS).
   2. `cd backend && source .venv/bin/activate`  

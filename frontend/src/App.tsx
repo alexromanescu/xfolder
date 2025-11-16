@@ -20,6 +20,7 @@ import { formatDate, humanBytes, humanDuration, formatEta } from "./format";
 import { MetricCard } from "./components/MetricCard";
 import { ScanForm } from "./components/ScanForm";
 import { GroupTable } from "./components/GroupTable";
+import { TreeView } from "./components/TreeView";
 import { WarningsPanel } from "./components/WarningsPanel";
 import { DiffModal } from "./components/DiffModal";
 
@@ -38,6 +39,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<GroupTab>("identical");
   const [loadingScan, setLoadingScan] = useState(false);
   const [loadingGroups, setLoadingGroups] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "tree">("list");
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
   const [plan, setPlan] = useState<DeletionPlan | null>(null);
   const [planResult, setPlanResult] = useState<DeletionResult | null>(null);
@@ -53,6 +55,8 @@ export default function App() {
 
   const progressValue = currentScan?.progress ?? null;
   const etaLabel = formatEta(currentScan?.eta_seconds ?? null);
+  const phase = currentScan?.phase ?? "";
+  const lastPath = currentScan?.last_path ?? "";
   const isRunning = currentScan?.status === "running";
 
   useEffect(() => {
@@ -243,11 +247,10 @@ export default function App() {
             <div className="panel-header">
               <div>
                 <div className="panel-title">Scan Progress</div>
-                <p className="muted">
-                  Scanned {currentScan?.stats?.folders_scanned ?? 0} folders ·
-                  {" "}
-                  {currentScan?.stats?.files_scanned ?? 0} files — {etaLabel}
-                </p>
+                <p className="muted">Scanned {currentScan?.stats?.folders_scanned ?? 0} folders · {currentScan?.stats?.files_scanned ?? 0} files — {etaLabel}</p>
+                {phase || lastPath ? (
+                  <p className="muted">Phase: {phase || "walking"}{lastPath ? ` — at ${lastPath}` : ""}</p>
+                ) : null}
               </div>
               <div className="muted" style={{ fontWeight: 600 }}>
                 {progressValue != null ? `${Math.round(progressValue * 100)}%` : "Working…"}
@@ -382,10 +385,14 @@ export default function App() {
                       : "Overlap Explorer"}
                 </div>
               ))}
+              <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                <button className={`button secondary`} type="button" onClick={() => setViewMode("list")}>List</button>
+                <button className={`button secondary`} type="button" onClick={() => setViewMode("tree")}>Tree</button>
+              </div>
             </div>
             {loadingGroups ? (
               <p className="muted">Loading groups…</p>
-            ) : (
+            ) : viewMode === "list" ? (
               <GroupTable
                 groups={currentGroups}
                 rootPath={currentScan.root_path}
@@ -394,6 +401,8 @@ export default function App() {
                 emptyLabel="No matches detected for this view yet."
                 onCompare={handleCompare}
               />
+            ) : (
+              <TreeView rootPath={currentScan.root_path} groups={currentGroups} />
             )}
             <div style={{ marginTop: 18, display: "flex", gap: 12 }}>
               <button
