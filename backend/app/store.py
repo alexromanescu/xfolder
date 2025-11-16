@@ -488,7 +488,12 @@ class ScanManager:
             scanner = FolderScanner(job.request, cache=self.file_cache, stats_sink=job.stats, meta_sink=job.meta)
             result = scanner.scan()
             job.meta["phase"] = "grouping"
-            similarity_groups = compute_similarity_groups(result.fingerprints, job.request.similarity_threshold)
+            similarity_groups = compute_similarity_groups(
+                result.fingerprints,
+                job.request.similarity_threshold,
+                stats=job.stats,
+                meta=job.meta,
+            )
 
             records_by_label: Dict[FolderLabel, List[GroupRecord]] = {label: [] for label in FolderLabel}
             combined_records: List[Tuple[FolderLabel, GroupRecord]] = []

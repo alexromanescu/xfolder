@@ -124,7 +124,7 @@ class FolderScanner:
         self._stats["folders_scanned"] = len(folders)
         if getattr(self, "_meta_sink", None) is not None:
             self._meta_sink["phase"] = "aggregating"
-        fingerprints = aggregate_fingerprints(fingerprints)
+        fingerprints = aggregate_fingerprints(fingerprints, self._stats, self._meta_sink)
         return ScanResult(
             folders=folders,
             fingerprints=fingerprints,
@@ -321,6 +321,8 @@ class FolderScanner:
 
 def aggregate_fingerprints(
     fingerprints: Dict[str, DirectoryFingerprint],
+    stats: Optional[Dict[str, int]] = None,
+    meta: Optional[Dict[str, str]] = None,
 ) -> Dict[str, DirectoryFingerprint]:
     aggregated: Dict[str, DirectoryFingerprint] = {}
     children: Dict[str, List[str]] = defaultdict(list)
@@ -329,7 +331,12 @@ def aggregate_fingerprints(
         if parent:
             children[parent].append(key)
 
-    for key in sorted(fingerprints.keys(), key=lambda value: len(Path(value).parts), reverse=True):
+    total = len(fingerprints)
+    if stats is not None:
+        stats["total_folders"] = total
+        stats["folders_aggregated"] = 0
+
+    for index, key in enumerate(sorted(fingerprints.keys(), key=lambda value: len(Path(value).parts), reverse=True), start=1):
         fingerprint = fingerprints[key]
         combined = dict(fingerprint.file_weights)
         for child_key in children.get(key, []):
@@ -346,6 +353,10 @@ def aggregate_fingerprints(
         fingerprint.folder.total_bytes = total_bytes
         fingerprint.folder.file_count = file_count
         aggregated[key] = aggregated_fp
+        if stats is not None:
+            stats["folders_aggregated"] = index
+        if meta is not None:
+            meta["last_path"] = str(fingerprint.folder.path)
     return aggregated
 
 
@@ -406,6 +417,8 @@ def _identity_to_path(identity: str) -> str:
 def compute_similarity_groups(
     fingerprints: Dict[str, DirectoryFingerprint],
     threshold: float,
+    stats: Optional[Dict[str, int]] = None,
+    meta: Optional[Dict[str, str]] = None,
 ) -> List["SimilarityGroup"]:
     folders = list(fingerprints.values())
     buckets: Dict[int, List[DirectoryFingerprint]] = defaultdict(list)
@@ -416,6 +429,15 @@ def compute_similarity_groups(
     groups: List[SimilarityGroup] = []
     visited_pairs: Set[Tuple[str, str]] = set()
 
+    total_pairs = 0
+    for bucket_items in buckets.values():
+        n = len(bucket_items)
+        if n > 1:
+            total_pairs += n * (n - 1) // 2
+    if stats is not None:
+        stats["similarity_pairs_total"] = total_pairs
+        stats["similarity_pairs_processed"] = 0
+
     for bucket_items in buckets.values():
         for i, a in enumerate(bucket_items):
             for b in bucket_items[i + 1 :]:
@@ -423,6 +445,10 @@ def compute_similarity_groups(
                 if key in visited_pairs:
                     continue
                 visited_pairs.add(key)
+                if stats is not None:
+                    stats["similarity_pairs_processed"] += 1
+                if meta is not None:
+                    meta["last_path"] = str(a.folder.path)
                 if _is_ancestor_descendant_pair(a.folder.relative_path, b.folder.relative_path):
                     continue
                 similarity = weighted_jaccard(a.file_weights, b.file_weights)
