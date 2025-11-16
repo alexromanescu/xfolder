@@ -1,0 +1,14 @@
+version: "3.9"
+services:
+  xfolder:
+    image: ghcr.io/${GHCR_OWNER}/xfolder:${TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      - XFS_CONFIG_PATH=/config
+      - XFS_LISTEN_HOST=0.0.0.0
+      - XFS_LISTEN_PORT=8080
+    volumes:
+      - ${DATA_DIR:-/opt/xfolder/data}:/data:rw
+      - ${CONFIG_DIR:-/opt/xfolder/config}:/config:rw
