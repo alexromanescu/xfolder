@@ -48,14 +48,14 @@ button {
 }
 
 .app-header {
-  padding: 32px 48px 12px;
+  padding: 20px 32px 8px;
   background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(14, 116, 144, 0));
   border-bottom: 1px solid rgba(56, 189, 248, 0.2);
 }
 
 .app-header h1 {
   margin: 0;
-  font-size: 32px;
+  font-size: 24px;
   font-weight: 700;
   letter-spacing: -0.5px;
 }
@@ -75,23 +75,18 @@ button {
 
 .app-content {
   flex: 1;
-  padding: 16px 48px 48px;
-  display: grid;
-  gap: 24px;
-}
-
-.card-grid {
-  display: grid;
+  padding: 12px 32px 32px;
+  display: flex;
+  flex-direction: column;
   gap: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .card {
   background: rgba(15, 23, 42, 0.65);
   backdrop-filter: blur(12px);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 20px;
+  border-radius: 14px;
+  padding: 14px;
   box-shadow: 0 16px 45px -36px rgba(59, 130, 246, 0.6);
   transition: transform 0.2s ease, border 0.2s ease;
 }
@@ -102,7 +97,7 @@ button {
 }
 
 .card-title {
-  font-size: 14px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 1.4px;
   color: var(--text-500);
@@ -116,7 +111,7 @@ button {
 }
 
 .card-value strong {
-  font-size: 28px;
+  font-size: 22px;
   font-weight: 600;
   color: var(--text-100);
 }
@@ -129,7 +124,7 @@ button {
   background: rgba(15, 23, 42, 0.7);
   border-radius: 18px;
   border: 1px solid var(--border);
-  padding: 24px 28px;
+  padding: 14px 16px;
   box-shadow: 0 18px 40px -30px rgba(56, 189, 248, 0.6);
 }
 
@@ -137,30 +132,30 @@ button {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .panel-title {
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 600;
 }
 
 .panel-actions {
   display: flex;
-  gap: 12px;
+  gap: 8px;
 }
 
 .tab-strip {
   display: flex;
   gap: 16px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.2);
-  margin-bottom: 18px;
+  margin-bottom: 12px;
 }
 
 .tab {
-  padding-bottom: 12px;
+  padding-bottom: 8px;
   font-weight: 500;
-  font-size: 15px;
+  font-size: 13px;
   cursor: pointer;
   color: var(--text-500);
   position: relative;
@@ -185,13 +180,13 @@ button {
 .table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14px;
+  font-size: 13px;
   table-layout: fixed;
 }
 
 .table th,
 .table td {
-  padding: 12px 16px;
+  padding: 8px 10px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.12);
   vertical-align: top;
 }
@@ -246,16 +241,16 @@ button {
   background: rgba(56, 189, 248, 0.12);
   color: var(--primary);
   border-radius: 999px;
-  padding: 4px 12px;
-  font-size: 13px;
+  padding: 3px 10px;
+  font-size: 12px;
   font-weight: 500;
 }
 
 .input-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
 .input-group {
@@ -265,8 +260,8 @@ button {
 
 .input-group label {
   display: block;
-  margin-bottom: 6px;
-  font-size: 13px;
+  margin-bottom: 4px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-500);
   text-transform: uppercase;
@@ -283,7 +278,7 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   text-transform: none;
   letter-spacing: normal;
@@ -293,12 +288,12 @@ button {
 input,
 select {
   width: 100%;
-  padding: 12px 14px;
-  border-radius: 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
   border: 1px solid rgba(148, 163, 184, 0.24);
   background: rgba(15, 23, 42, 0.7);
   color: var(--text-100);
-  font-size: 14px;
+  font-size: 13px;
   transition: border 0.2s ease, background 0.2s ease;
 }
 
@@ -319,11 +314,11 @@ select:focus {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 18px;
+  padding: 8px 14px;
   border-radius: 12px;
   border: none;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
@@ -359,7 +354,7 @@ select:focus {
 
 .muted {
   color: var(--text-500);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .status-dot {
@@ -391,7 +386,7 @@ select:focus {
 }
 
 .scroll-container table {
-  min-width: 680px;
+  min-width: 100%;
 }
 
 .warning-list {
@@ -552,44 +547,73 @@ select:focus {
   justify-self: end;
 }
 
+.group-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.summary-line {
+  font-size: 12px;
+}
+
+.folder-cell .folder-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .groups-comparison-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 55%) minmax(0, 45%);
-  gap: 18px;
+  display: flex;
   align-items: stretch;
+  gap: 0;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .groups-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  min-width: 240px;
+  min-height: 0;
 }
 
 .groups-table-shell {
-  border-radius: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  background: rgba(15, 23, 42, 0.45);
-  max-height: 520px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.55);
+  height: 520px;
   overflow: auto;
+}
+
+.groups-resize-handle {
+  width: 6px;
+  cursor: col-resize;
+  margin: 0 8px;
+  border-radius: 999px;
+  background: radial-gradient(circle at center, rgba(148, 163, 184, 0.4), transparent);
 }
 
 .comparison-panel {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  border-radius: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  background: rgba(15, 23, 42, 0.45);
-  padding: 16px;
+  gap: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.6);
+  padding: 14px;
   overflow: hidden;
+  min-width: 260px;
+  min-height: 0;
 }
 
 .comparison-panel-inner {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   overflow-y: auto;
-  max-height: 520px;
+  height: 520px;
 }
 .tree-duplicates {
   padding: 8px 0 12px;
@@ -644,16 +668,12 @@ select:focus {
   font-size: 13px;
 }
 
-.comparison-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
 .comparison-grid {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 4px;
 }
 
 .comparison-toolbar {
@@ -665,12 +685,16 @@ select:focus {
 
 .comparison-card {
   border: 1px solid rgba(148, 163, 184, 0.12);
-  border-radius: 14px;
-  padding: 14px;
+  border-radius: 10px;
+  padding: 10px 12px;
   background: rgba(15, 23, 42, 0.4);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+  flex: 0 0 260px;
+  width: 260px;
+  max-width: 260px;
+  min-height: 0;
 }
 
 .comparison-card.canonical {
@@ -679,13 +703,17 @@ select:focus {
 
 .comparison-card-title {
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-100);
 }
 
 .comparison-path {
   font-weight: 600;
   color: var(--text-100);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .diff-grid {
@@ -717,7 +745,7 @@ select:focus {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .diff-column li {
@@ -744,18 +772,27 @@ select:focus {
   margin: 8px 0 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  font-size: 13px;
+  gap: 4px;
+  font-size: 12px;
+  max-height: 260px;
+  overflow-y: auto;
 }
 
 .entry-row {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding: 6px 8px;
-  border-radius: 8px;
+  padding: 4px 8px;
+  border-radius: 6px;
   background: rgba(15, 23, 42, 0.4);
   border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.entry-row span:first-child {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .entry-row.status-added {
@@ -886,6 +923,44 @@ select:focus {
   align-items: center;
 }
 
+.top-layout {
+  display: flex;
+  gap: 16px;
+  align-items: stretch;
+}
+
+.top-left {
+  flex: 0 0 33.333%;
+  min-width: 280px;
+}
+
+.top-right {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.active-scans-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+}
+
+.active-scans-table {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.active-scans-table .scroll-container {
+  height: 100%;
+}
+
+.top-right .card-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
 .log-list {
   flex: 1;
   overflow-y: auto;
@@ -971,6 +1046,15 @@ select:focus {
     padding: 20px;
   }
 
+  .top-layout {
+    flex-direction: column;
+  }
+
+  .top-left,
+  .top-right {
+    flex: 1 1 auto;
+  }
+
   .panel-header {
     flex-direction: column;
     align-items: flex-start;
@@ -983,13 +1067,19 @@ select:focus {
   }
 
   .groups-comparison-layout {
-    grid-template-columns: minmax(0, 1fr);
+    flex-direction: column;
+    gap: 16px;
   }
 
   .groups-table-shell,
   .comparison-panel,
   .comparison-panel-inner {
     max-height: none;
+    height: auto;
+  }
+
+  .groups-resize-handle {
+    display: none;
   }
 
   .input-row {

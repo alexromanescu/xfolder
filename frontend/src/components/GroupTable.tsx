@@ -37,12 +37,9 @@ export function GroupTable({
       <table className="table">
         <thead>
           <tr>
-            <th />
+            <th>Status</th>
             <th>Folder</th>
-            <th>Duplicates</th>
-            <th>Similarity</th>
-            <th>Reclaimable</th>
-            <th>Stability</th>
+            <th>Members</th>
           </tr>
         </thead>
         <tbody>
@@ -61,25 +58,37 @@ export function GroupTable({
             const referencePath = reference ? relativePath(reference.path, rootPath) : group.canonical_path;
             const isNearDuplicate = maxSimilarity < 1 - 1e-9;
             const isSelected = group.group_id === selectedGroupId;
+            const duplicateCount = Math.max(0, group.members.length - 1);
             return (
               <tr key={group.group_id} className={isSelected ? "selected" : ""}>
                 <td>
-                  <span className={labelClass[group.label]}>
-                    {group.label === "identical"
-                      ? "Identical"
-                      : group.label === "near_duplicate"
-                        ? "Near Duplicate"
-                      : "Overlap"}
-                  </span>
+                  <div className="group-summary">
+                    <span className={labelClass[group.label]}>
+                      {group.label === "identical"
+                        ? "Identical"
+                        : group.label === "near_duplicate"
+                          ? "Near Duplicate"
+                          : "Overlap"}
+                    </span>
+                    <div className="muted summary-line">{(maxSimilarity * 100).toFixed(1)}%</div>
+                    <div className="muted summary-line">
+                      {reclaimable ? humanBytes(reclaimable) : "—"}
+                    </div>
+                    <div className="muted summary-line">
+                      {group.members.some((member) => member.unstable) ? "Changes detected" : "Stable"}
+                    </div>
+                  </div>
                 </td>
-                <td>
-                  <div>{referencePath}</div>
+                <td className="folder-cell">
+                  <div className="folder-path">{referencePath}</div>
                   {reference ? (
                     <div className="muted">
                       {humanBytes(reference.total_bytes)} • {reference.file_count} files
                     </div>
                   ) : null}
                   <div className="muted">{group.group_id}</div>
+                </td>
+                <td>
                   {onSelectGroup && group.members.length > 1 ? (
                     <button
                       type="button"
@@ -89,9 +98,7 @@ export function GroupTable({
                     >
                       View comparison
                     </button>
-                  ) : null}
-                </td>
-                <td>
+                    ) : null}
                   <div className="muted">Select paths to quarantine</div>
                   <div className="duplicates-list">
                     {group.members.slice(1).map((member) => {
@@ -115,7 +122,7 @@ export function GroupTable({
                             <button
                               type="button"
                               className="button secondary compare-button"
-                              onClick={() => onCompare(group, member.relative_path)}
+                          onClick={() => onCompare(group, member.relative_path)}
                             >
                               Compare
                             </button>
@@ -124,22 +131,6 @@ export function GroupTable({
                       );
                     })}
                   </div>
-                </td>
-                <td>
-                  <div>{(maxSimilarity * 100).toFixed(1)}%</div>
-                  {group.divergences.length ? (
-                    <div className="muted">
-                      Top delta: {humanBytes(group.divergences[0].delta_bytes)}
-                    </div>
-                  ) : null}
-                </td>
-                <td>{reclaimable ? humanBytes(reclaimable) : "—"}</td>
-                <td>
-                  {group.members.some((member) => member.unstable) ? (
-                    <span className="pill">Changes detected</span>
-                  ) : (
-                    <span className="muted">Stable</span>
-                  )}
                 </td>
               </tr>
             );

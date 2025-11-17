@@ -68,6 +68,7 @@ export default function App() {
   const [comparisonLoading, setComparisonLoading] = useState(false);
   const [comparisonContents, setComparisonContents] = useState<GroupContents | null>(null);
   const [showMatchingEntries, setShowMatchingEntries] = useState(true);
+  const [groupsPaneWidth, setGroupsPaneWidth] = useState<number | null>(null);
 
   const currentScan = useMemo<ScanProgress | null>(
     () => scans.find((item) => item.scan_id === selectedScanId) ?? (scans[0] ?? null),
@@ -342,6 +343,33 @@ export default function App() {
     [currentScan],
   );
 
+  const handleGroupsResizeMouseDown = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      const container = event.currentTarget.parentElement;
+      if (!container) {
+        return;
+      }
+      const rect = container.getBoundingClientRect();
+      const startX = event.clientX;
+      const startWidth = groupsPaneWidth ?? rect.width * 0.45;
+
+      const onMove = (moveEvent: MouseEvent) => {
+        const delta = moveEvent.clientX - startX;
+        const next = Math.min(rect.width * 0.8, Math.max(240, startWidth + delta));
+        setGroupsPaneWidth(next);
+      };
+
+      const onUp = () => {
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+      };
+
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    },
+    [groupsPaneWidth],
+  );
+
   const handleConfirmPlan = async () => {
     if (!plan) return;
     try {
@@ -476,7 +504,86 @@ export default function App() {
         </div>
       </header>
       <main className="app-content">
-        <ScanForm onSubmit={handleScanLaunch} busy={loadingScan} />
+        <div className="top-layout">
+          <div className="top-left">
+            <ScanForm onSubmit={handleScanLaunch} busy={loadingScan} />
+          </div>
+          <div className="top-right">
+            {currentScan ? (
+              <div className="panel">
+                <div className="panel-header">
+                  <div>
+                    <div className="panel-title">Active Scans</div>
+                    <p className="muted">Pick a scan to inspect its groups, warnings, and exports.</p>
+                  </div>
+                </div>
+                <div className="active-scans-body">
+                  <div className="active-scans-table">
+                    <div className="scroll-container">
+                      <table className="table">
+                        <thead>
+                          <tr>
+                            <th>Status</th>
+                            <th>Root</th>
+                            <th>Started</th>
+                            <th>Completed</th>
+                            <th>Duration</th>
+                            <th>Similarity</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {scans.map((scan) => (
+                            <tr
+                              key={scan.scan_id}
+                              onClick={() => setSelectedScanId(scan.scan_id)}
+                              style={{
+                                cursor: "pointer",
+                                background:
+                                  scan.scan_id === currentScan.scan_id
+                                    ? "rgba(56, 189, 248, 0.08)"
+                                    : undefined,
+                              }}
+                            >
+                              <td>
+                                <span className={`status-dot ${scan.status}`} />
+                                <span style={{ marginLeft: 12, textTransform: "capitalize" }}>
+                                  {scan.status}
+                                </span>
+                              </td>
+                              <td>
+                                <div>{scan.root_path}</div>
+                                <div className="muted">#{scan.scan_id}</div>
+                              </td>
+                              <td>{formatDate(scan.started_at)}</td>
+                              <td>{formatDate(scan.completed_at)}</td>
+                              <td>{humanDuration(scan.started_at, scan.completed_at)}</td>
+                              <td>
+                                {scan.status === "completed"
+                                  ? scan.scan_id === currentScan?.scan_id
+                                    ? `${groupsByLabel.identical.length + groupsByLabel.near_duplicate.length} groups`
+                                    : "Ready"
+                                  : "—"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <div className="card-grid">
+                    <MetricCard title="Folders Scanned" value={summaryStats.folders.toLocaleString()} />
+                    <MetricCard title="Files Scanned" value={summaryStats.files.toLocaleString()} />
+                    <MetricCard
+                      title="Active Workers"
+                      value={summaryStats.workers ? summaryStats.workers.toString() : "auto"}
+                    />
+                    <MetricCard title="Potential Reclaim" value={humanBytes(totalPotentialReclaim)} />
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
 
         {isRunning ? (
           <div className="panel">
@@ -531,77 +638,6 @@ export default function App() {
           </div>
         ) : null}
 
-        {currentScan ? (
-          <div className="panel">
-            <div className="panel-header">
-              <div>
-                <div className="panel-title">Active Scans</div>
-                <p className="muted">Pick a scan to inspect its groups, warnings, and exports.</p>
-              </div>
-            </div>
-            <div className="scroll-container">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Status</th>
-                    <th>Root</th>
-                    <th>Started</th>
-                    <th>Completed</th>
-                    <th>Duration</th>
-                    <th>Similarity</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {scans.map((scan) => (
-                    <tr
-                      key={scan.scan_id}
-                      onClick={() => setSelectedScanId(scan.scan_id)}
-                      style={{
-                        cursor: "pointer",
-                        background:
-                          scan.scan_id === currentScan.scan_id
-                            ? "rgba(56, 189, 248, 0.08)"
-                            : undefined,
-                      }}
-                    >
-                      <td>
-                        <span className={`status-dot ${scan.status}`} />
-                        <span style={{ marginLeft: 12, textTransform: "capitalize" }}>
-                          {scan.status}
-                        </span>
-                      </td>
-                      <td>
-                        <div>{scan.root_path}</div>
-                        <div className="muted">#{scan.scan_id}</div>
-                      </td>
-                      <td>{formatDate(scan.started_at)}</td>
-                      <td>{formatDate(scan.completed_at)}</td>
-                      <td>{humanDuration(scan.started_at, scan.completed_at)}</td>
-                      <td>
-                        {scan.status === "completed"
-                          ? scan.scan_id === currentScan?.scan_id
-                            ? `${groupsByLabel.identical.length + groupsByLabel.near_duplicate.length} groups`
-                            : "Ready"
-                          : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ) : null}
-
-        <div className="card-grid">
-          <MetricCard title="Folders Scanned" value={summaryStats.folders.toLocaleString()} />
-          <MetricCard title="Files Scanned" value={summaryStats.files.toLocaleString()} />
-          <MetricCard
-            title="Active Workers"
-            value={summaryStats.workers ? summaryStats.workers.toString() : "auto"}
-          />
-          <MetricCard title="Potential Reclaim" value={humanBytes(totalPotentialReclaim)} />
-        </div>
-
         {currentScan?.status === "completed" ? (
           <div className="panel">
             <div className="panel-header">
@@ -636,7 +672,12 @@ export default function App() {
               </div>
             </div>
             <div className="groups-comparison-layout">
-              <div className="groups-panel">
+              <div
+                className="groups-panel"
+                style={{
+                  flex: `0 0 ${groupsPaneWidth ?? 360}px`,
+                }}
+              >
                 <div className="tab-strip">
                   {TAB_ORDER.map((tab) => (
                     <div
@@ -724,15 +765,21 @@ export default function App() {
                   ) : null}
                 </div>
               </div>
-              <ComparisonPanel
-                group={selectedComparisonGroup}
-                entries={comparisonEntries}
-                contents={comparisonContents}
-                loading={comparisonLoading}
-                showMatches={showMatchingEntries}
-                onToggleShowMatches={() => setShowMatchingEntries((prev) => !prev)}
-                onClear={() => setSelectedGroupId(null)}
+              <div
+                className="groups-resize-handle"
+                onMouseDown={handleGroupsResizeMouseDown}
               />
+              <div style={{ flex: "1 1 0", minWidth: 320, minHeight: 0 }}>
+                <ComparisonPanel
+                  group={selectedComparisonGroup}
+                  entries={comparisonEntries}
+                  contents={comparisonContents}
+                  loading={comparisonLoading}
+                  showMatches={showMatchingEntries}
+                  onToggleShowMatches={() => setShowMatchingEntries((prev) => !prev)}
+                  onClear={() => setSelectedGroupId(null)}
+                />
+              </div>
             </div>
           </div>
         ) : (

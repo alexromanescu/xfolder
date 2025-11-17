@@ -20,9 +20,17 @@ interface ComparisonPanelProps {
 export function ComparisonPanel({ group, entries, loading, contents, showMatches, onToggleShowMatches, onClear }: ComparisonPanelProps) {
   if (!group) {
     return (
-      <div className="panel comparison-panel">
-        <div className="panel-title">Folder Comparison</div>
-        <p className="muted">Select a canonical folder from the list or tree to inspect its duplicates.</p>
+      <div className="comparison-panel">
+        <div className="panel-header">
+          <div>
+            <div className="panel-title">Folder Comparison</div>
+          </div>
+        </div>
+        <div className="comparison-panel-inner">
+          <p className="muted">
+            Select a canonical folder from the list or tree to inspect its duplicates.
+          </p>
+        </div>
       </div>
     );
   }
