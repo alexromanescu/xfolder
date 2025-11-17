@@ -20,6 +20,7 @@ This file captures the high-level state after the recent enhancements so we can 
 - **Memory Instrumentation + Lightweight Models**
   - Scanner, grouping, and analytics now operate on lightweight dataclasses (`FolderInfo`, `GroupInfo`) rather than pydantic models, dramatically reducing transient allocations; pydantic objects are only materialized at the REST boundary.
   - Fingerprints are persisted to a shelve-backed store once grouping completes so scans no longer keep entire fingerprint maps in RAM.
+  - Grouping no longer maintains an O(N²) visited-pairs set and uses a streaming weighted Jaccard calculation, cutting peak RSS on `test_mockup` from ~1.7 GiB down to ~54 MiB and reducing grouping time from ~23 s to ~7 s in the default benchmark run.
   - The benchmark harness gained phase heap snapshots, RSS timelines, smaps/object-census logging, and per-run JSON archives under `docs/benchmark-history/`.
 - **Diagnostics & Observability**
   - SSE log streaming via `GET /api/system/logs/stream`, wired into a Diagnostics drawer in the UI.

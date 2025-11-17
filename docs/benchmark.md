@@ -41,21 +41,21 @@ The script starts a `ScanManager`, waits for completion, and prints per-phase ti
 - **Command**: `backend/.venv/bin/python backend/scripts/run_benchmark.py --json-output`
 - **Date**: 2025-11-17
 - **Target**: `/home/alex/Work/Projects/xfolder/test_mockup`
-- **Insights**: Similarity matrix + treemap disabled (default settings)
+- **Insights**: Similarity matrix + treemap disabled (default settings). Grouping no longer keeps an O(N²) visited-pairs set in memory and uses a streaming weighted Jaccard calculation, which keeps RAM nearly flat during the grouping phase.
 
 | Phase | Duration (s) |
 | --- | --- |
-| walking | 0.34 |
+| walking | 0.36 |
 | aggregating | 0.12 |
-| grouping | 22.77 |
+| grouping | 6.54 |
 
 Additional metrics:
 
 | Metric | Value |
 | --- | --- |
-| Total wall time | 23.23 s |
-| Peak RSS | 1.67 GiB (1711.27 MiB) |
-| Average RSS | 0.33 GiB (328.16 MiB) |
+| Total wall time | 7.03 s |
+| Peak RSS | 0.05 GiB (53.65 MiB) |
+| Average RSS | 0.05 GiB (51.73 MiB) |
 | Resource samples captured | 6 |
 | Folders scanned | 6,118 |
 

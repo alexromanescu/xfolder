@@ -443,7 +443,6 @@ def compute_similarity_groups(
         buckets[bucket_key].append(fingerprint)
 
     groups: List[SimilarityGroup] = []
-    visited_pairs: Set[Tuple[str, str]] = set()
 
     total_pairs = 0
     for bucket_items in buckets.values():
@@ -457,10 +456,6 @@ def compute_similarity_groups(
     for bucket_items in buckets.values():
         for i, a in enumerate(bucket_items):
             for b in bucket_items[i + 1 :]:
-                key = tuple(sorted((a.folder.relative_path, b.folder.relative_path)))
-                if key in visited_pairs:
-                    continue
-                visited_pairs.add(key)
                 if stats is not None:
                     stats["similarity_pairs_processed"] += 1
                 if meta is not None:
@@ -479,14 +474,42 @@ def compute_similarity_groups(
 
 
 def weighted_jaccard(a: Dict[str, int], b: Dict[str, int]) -> float:
+    """Compute weighted Jaccard similarity without allocating large helper sets.
+
+    This implementation iterates over the smaller mapping first and uses
+    direct dictionary lookups to accumulate the intersection and union,
+    avoiding the temporary ``set(a) | set(b)`` previously used. That
+    significantly reduces peak RAM during large grouping runs because we
+    no longer materialize full key unions for every pairwise comparison.
+    """
+    if not a and not b:
+        return 0.0
+
+    # Always iterate the smaller mapping first to minimise lookups.
+    if len(a) <= len(b):
+        smaller, larger = a, b
+    else:
+        smaller, larger = b, a
+
     intersection = 0
     union = 0
-    keys = set(a.keys()) | set(b.keys())
-    for key in keys:
-        wa = a.get(key, 0)
-        wb = b.get(key, 0)
-        intersection += min(wa, wb)
-        union += max(wa, wb)
+
+    for key, wa in smaller.items():
+        wb = larger.get(key)
+        if wb is None:
+            union += wa
+        else:
+            if wa <= wb:
+                intersection += wa
+                union += wb
+            else:
+                intersection += wb
+                union += wa
+
+    for key, wb in larger.items():
+        if key not in smaller:
+            union += wb
+
     if union == 0:
         return 0.0
     return intersection / union

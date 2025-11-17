@@ -1,0 +1,154 @@
+{
+  "scan_id": "d9e92a655558",
+  "root_path": "/home/alex/Work/Projects/xfolder/test_mockup",
+  "started_at": "2025-11-17T21:14:49.242944+00:00",
+  "completed_at": "2025-11-17T21:14:56.273946+00:00",
+  "total_duration_seconds": 7.031002,
+  "stats": {
+    "files_scanned": 0,
+    "folders_scanned": 6118,
+    "folders_discovered": 6118,
+    "bytes_scanned": 0,
+    "workers": 32,
+    "total_folders": 6118,
+    "folders_aggregated": 6118
+  },
+  "phase_timings": [
+    {
+      "phase": "walking",
+      "started_at": "2025-11-17T21:14:49.243135+00:00",
+      "completed_at": "2025-11-17T21:14:49.604804+00:00",
+      "duration_seconds": 0.361669
+    },
+    {
+      "phase": "aggregating",
+      "started_at": "2025-11-17T21:14:49.604959+00:00",
+      "completed_at": "2025-11-17T21:14:49.729017+00:00",
+      "duration_seconds": 0.124058
+    },
+    {
+      "phase": "grouping",
+      "started_at": "2025-11-17T21:14:49.729164+00:00",
+      "completed_at": "2025-11-17T21:14:56.273954+00:00",
+      "duration_seconds": 6.54479
+    }
+  ],
+  "resource_samples": 6,
+  "peak_rss_bytes": 56258560,
+  "peak_rss_mebibytes": 53.65234375,
+  "average_rss_bytes": 54246741.333333336,
+  "resource_samples_detail": [
+    {
+      "timestamp": "2025-11-17T21:14:49.243416+00:00",
+      "seconds_since_start": 0.000472,
+      "phase": "walking",
+      "rss_bytes": 49963008,
+      "rss_mebibytes": 47.6484375,
+      "cpu_cores": 16,
+      "load_1m": 1.4892578125,
+      "read_bytes": 0,
+      "write_bytes": 32768
+    },
+    {
+      "timestamp": "2025-11-17T21:14:49.604950+00:00",
+      "seconds_since_start": 0.362006,
+      "phase": null,
+      "rss_bytes": 53370880,
+      "rss_mebibytes": 50.8984375,
+      "cpu_cores": 16,
+      "load_1m": 1.4892578125,
+      "read_bytes": 0,
+      "write_bytes": 32768
+    },
+    {
+      "timestamp": "2025-11-17T21:14:49.605000+00:00",
+      "seconds_since_start": 0.362056,
+      "phase": "aggregating",
+      "rss_bytes": 53370880,
+      "rss_mebibytes": 50.8984375,
+      "cpu_cores": 16,
+      "load_1m": 1.4892578125,
+      "read_bytes": 0,
+      "write_bytes": 32768
+    },
+    {
+      "timestamp": "2025-11-17T21:14:49.729158+00:00",
+      "seconds_since_start": 0.486214,
+      "phase": null,
+      "rss_bytes": 56258560,
+      "rss_mebibytes": 53.65234375,
+      "cpu_cores": 16,
+      "load_1m": 1.4892578125,
+      "read_bytes": 0,
+      "write_bytes": 32768
+    },
+    {
+      "timestamp": "2025-11-17T21:14:49.729207+00:00",
+      "seconds_since_start": 0.486263,
+      "phase": "grouping",
+      "rss_bytes": 56258560,
+      "rss_mebibytes": 53.65234375,
+      "cpu_cores": 16,
+      "load_1m": 1.4892578125,
+      "read_bytes": 0,
+      "write_bytes": 32768
+    },
+    {
+      "timestamp": "2025-11-17T21:14:56.274107+00:00",
+      "seconds_since_start": 7.031163,
+      "phase": null,
+      "rss_bytes": 56258560,
+      "rss_mebibytes": 53.65234375,
+      "cpu_cores": 16,
+      "load_1m": 1.7705078125,
+      "read_bytes": 0,
+      "write_bytes": 32768
+    }
+  ],
+  "phase_memory_peaks": {
+    "walking": {
+      "timestamp": "2025-11-17T21:14:49.243416+00:00",
+      "seconds_since_start": 0.000472,
+      "phase": "walking",
+      "rss_bytes": 49963008,
+      "rss_mebibytes": 47.6484375,
+      "cpu_cores": 16,
+      "load_1m": 1.4892578125,
+      "read_bytes": 0,
+      "write_bytes": 32768
+    },
+    "aggregating": {
+      "timestamp": "2025-11-17T21:14:49.605000+00:00",
+      "seconds_since_start": 0.362056,
+      "phase": "aggregating",
+      "rss_bytes": 53370880,
+      "rss_mebibytes": 50.8984375,
+      "cpu_cores": 16,
+      "load_1m": 1.4892578125,
+      "read_bytes": 0,
+      "write_bytes": 32768
+    },
+    "grouping": {
+      "timestamp": "2025-11-17T21:14:49.729207+00:00",
+      "seconds_since_start": 0.486263,
+      "phase": "grouping",
+      "rss_bytes": 56258560,
+      "rss_mebibytes": 53.65234375,
+      "cpu_cores": 16,
+      "load_1m": 1.4892578125,
+      "read_bytes": 0,
+      "write_bytes": 32768
+    }
+  },
+  "structure_metrics": {
+    "group_records": 0,
+    "group_members_total": 0,
+    "group_pairwise_entries": 0,
+    "group_divergence_entries": 0,
+    "matrix_entries": 0,
+    "fingerprint_count": 6118
+  },
+  "extra_resource_samples": [],
+  "object_census": [],
+  "smaps_samples": []
+}
