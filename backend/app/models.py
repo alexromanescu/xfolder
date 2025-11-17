@@ -104,6 +104,13 @@ class PhaseProgress(BaseModel):
     progress: Optional[float] = None
 
 
+class PhaseTiming(BaseModel):
+    phase: str
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+    duration_seconds: Optional[float] = None
+
+
 class ScanProgress(BaseModel):
     scan_id: str
     status: ScanStatus
@@ -229,6 +236,21 @@ class ResourceStats(BaseModel):
     process_rss_bytes: int
     process_read_bytes: Optional[int] = None
     process_write_bytes: Optional[int] = None
+
+
+class ResourceSample(ResourceStats):
+    timestamp: datetime
+
+
+class ScanMetrics(BaseModel):
+    scan_id: str
+    root_path: Path
+    started_at: datetime
+    completed_at: Optional[datetime]
+    worker_count: int
+    bytes_scanned: int
+    phase_timings: List[PhaseTiming]
+    resource_samples: List[ResourceSample]
 
 
 class FolderEntry(BaseModel):

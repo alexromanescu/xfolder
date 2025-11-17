@@ -9,7 +9,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Set, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 from .cache import FileHashCache, FileCacheKey
 from .models import (
@@ -48,11 +48,13 @@ class FolderScanner:
         cache: Optional[FileHashCache] = None,
         stats_sink: Optional[Dict[str, int]] = None,
         meta_sink: Optional[Dict[str, str]] = None,
+        phase_callback: Optional[Callable[[str], None]] = None,
     ) -> None:
         self.request = request
         self.cache = cache
         self._stats_sink = stats_sink
         self._meta_sink = meta_sink
+        self._phase_callback = phase_callback
         self._warnings: List[WarningRecord] = []
         self._stats: Dict[str, int] = defaultdict(int)
         self._seen_inodes: Set[Tuple[int, int]] = set()
@@ -60,6 +62,7 @@ class FolderScanner:
         self._set_stat("files_scanned", 0)
         self._set_stat("folders_scanned", 0)
         self._set_stat("folders_discovered", 1)
+        self._set_stat("bytes_scanned", 0)
 
     def scan(self) -> ScanResult:
         root = self.request.root_path
@@ -124,6 +127,8 @@ class FolderScanner:
         self._stats["folders_scanned"] = len(folders)
         if getattr(self, "_meta_sink", None) is not None:
             self._meta_sink["phase"] = "aggregating"
+        if self._phase_callback:
+            self._phase_callback("aggregating")
         fingerprints = aggregate_fingerprints(fingerprints, self._stats, self._meta_sink)
         return ScanResult(
             folders=folders,
@@ -186,6 +191,7 @@ class FolderScanner:
             return None, True
 
         self._increment_stat("files_scanned")
+        self._increment_stat("bytes_scanned", record.size)
         return record, False
 
     def _add_warning(self, warning: WarningRecord) -> None:

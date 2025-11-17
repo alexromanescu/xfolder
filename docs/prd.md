@@ -125,17 +125,20 @@ Non-goals: cross-machine synchronization, deduplicating storage at the filesyste
   - Stability and permission warnings.
 - Progress telemetry:
   - Live counters for folders/files scanned, folders discovered, active workers.
-  - Progress bar updated as folders are processed, with rolling ETA derived from scan rate.
+  - Overall progress bar plus per-phase progress bars for `walking` (filesystem traversal), `aggregating` (hierarchy roll-up), and `grouping` (similarity computation), each with a status indicator and percentage.
+  - Rolling ETA derived primarily from filesystem walk throughput, with phase information surfaced via `ScanProgress.phases`.
 - Exports: current view → Markdown, JSON (JavaScript Object Notation), CSV (Comma-Separated Values).
 - Internationalization: UTF-8 only for v1.
 - Diff visualization:
   - REST endpoint `GET /api/scans/{scan_id}/groups/{group_id}/diff` returns a diff tree with `only_left`, `only_right`, and `mismatched` entries derived from aggregated fingerprints.
   - UI exposes a “Compare” action for near-duplicate members; modal renders side-by-side differences with byte sizes.
+  - Folder Comparison panel shows canonical and duplicate folder contents, highlighting unique and mismatched entries; matching entries can be toggled on/off for clarity.
 
 ### 10.1 View Enhancements (Post-v2.1)
 - **Tree View**: Similarity Groups now offer a List/Tree switch. The tree aggregates duplicate stats per folder (bytes, identical/near counts, reclaimable bytes) and supports search + expand/collapse for large hierarchies.
-- **Progress Telemetry**: Scan progress panel streams phase (`walking`, `aggregating`, `grouping`), last processed path, and ETA derived from folders discovered versus scanned.
+- **Progress Telemetry**: Scan progress panel streams phase (`walking`, `aggregating`, `grouping`), last processed path, and exposes per-phase progress and status.
 - **Diff Workflow**: Compare modal integrates with the diff API so users can inspect folder-level differences before acting.
+ - **Visual Insights**: Similarity Matrix (top-K adjacency) and Duplicate-density Treemap views are available for high-level exploration.
 
 ---
 

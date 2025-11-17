@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import asyncio
 import json
 from pathlib import Path
 from typing import Optional
@@ -13,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import AppConfig
 from .logstream import LogStreamHandler
+from .metrics import MetricsExporter
 from .models import (
     ConfirmDeletionPayload,
     DeletionPlan,
@@ -25,11 +25,14 @@ from .models import (
     GroupRecord,
     ResourceStats,
     ScanProgress,
+    ScanMetrics,
     ScanRequest,
     SimilarityMatrixResponse,
     TreemapResponse,
 )
+from .progress import ProgressBroadcaster
 from .store import ScanManager
+from .system import read_resource_stats
 
 logger = logging.getLogger("xfolder")
 
@@ -42,8 +45,17 @@ if config.log_stream_enabled:
     log_stream_handler = LogStreamHandler()
     logger.addHandler(log_stream_handler)
 
-config.config_path.mkdir(parents=True, exist_ok=True)
-scan_manager = ScanManager(config)
+try:
+    config.config_path.mkdir(parents=True, exist_ok=True)
+except PermissionError:
+    fallback = Path.cwd() / ".config"
+    fallback.mkdir(parents=True, exist_ok=True)
+    logger.warning("Unable to write to %s; falling back to %s", config.config_path, fallback)
+    config.config_path = fallback
+metrics_exporter = MetricsExporter() if config.metrics_enabled else None
+scan_manager = ScanManager(config, metrics_exporter=metrics_exporter)
+progress_stream = ProgressBroadcaster(scan_manager)
+progress_stream.start()
 
 app = FastAPI(title="Folder Similarity Scanner", version="2.1")
 
@@ -63,6 +75,7 @@ def get_scan_manager() -> ScanManager:
 @app.on_event("shutdown")
 def shutdown_event() -> None:
     scan_manager.shutdown()
+    progress_stream.stop()
 
 
 @app.get("/api/health")
@@ -81,9 +94,34 @@ def list_scans(manager: ScanManager = Depends(get_scan_manager)) -> list[ScanPro
     return [manager.get_progress(job.scan_id) for job in manager.list_jobs()]
 
 
+@app.get("/api/scans/events")
+async def stream_scan_progress(once: bool = Query(default=False)):
+    subscriber = progress_stream.subscribe()
+
+    async def event_generator():
+        queue, _loop = subscriber
+        try:
+            for payload in progress_stream.history():
+                yield _format_sse(payload)
+            if once:
+                return
+            while True:
+                data = await queue.get()
+                yield _format_sse(data)
+        finally:
+            progress_stream.unsubscribe(subscriber)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
 @app.get("/api/scans/{scan_id}", response_model=ScanProgress)
 def get_scan(scan_id: str, manager: ScanManager = Depends(get_scan_manager)) -> ScanProgress:
     return manager.get_progress(scan_id)
+
+
+@app.get("/api/scans/{scan_id}/metrics", response_model=ScanMetrics)
+def get_scan_metrics(scan_id: str, manager: ScanManager = Depends(get_scan_manager)) -> ScanMetrics:
+    return manager.get_metrics(scan_id)
 
 
 @app.get("/api/scans/{scan_id}/groups", response_model=list[GroupRecord])
@@ -176,7 +214,7 @@ def get_group_contents(
 
 
 @app.get("/api/system/logs/stream")
-async def stream_logs(level: Optional[str] = Query(default=None)):
+async def stream_logs(level: Optional[str] = Query(default=None), once: bool = Query(default=False)):
     if not config.log_stream_enabled or not log_stream_handler:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Log streaming disabled")
     requested = (level or config.log_level).upper()
@@ -188,6 +226,8 @@ async def stream_logs(level: Optional[str] = Query(default=None)):
         try:
             for entry in log_stream_handler.history(min_level):
                 yield _format_sse(entry)
+            if once:
+                return
             while True:
                 entry = await queue.get()
                 if entry.level_no >= min_level:
@@ -200,40 +240,15 @@ async def stream_logs(level: Optional[str] = Query(default=None)):
 
 @app.get("/api/system/resources", response_model=ResourceStats)
 def get_resources() -> ResourceStats:
-    import os
-    import resource
+    return read_resource_stats()
 
-    cpu_cores = os.cpu_count() or 1
-    try:
-        load_1m = os.getloadavg()[0]
-    except (OSError, AttributeError):
-        load_1m = 0.0
 
-    usage = resource.getrusage(resource.RUSAGE_SELF)
-    # ru_maxrss is kilobytes on Linux, bytes on macOS; normalize to bytes.
-    rss_kb = usage.ru_maxrss
-    process_rss_bytes = int(rss_kb * 1024)
-
-    read_bytes = None
-    write_bytes = None
-    try:
-        with open("/proc/self/io", "r", encoding="utf-8") as fh:  # Linux only
-            for line in fh:
-                if line.startswith("read_bytes:"):
-                    read_bytes = int(line.split()[1])
-                elif line.startswith("write_bytes:"):
-                    write_bytes = int(line.split()[1])
-    except OSError:
-        read_bytes = None
-        write_bytes = None
-
-    return ResourceStats(
-        cpu_cores=cpu_cores,
-        load_1m=float(load_1m),
-        process_rss_bytes=process_rss_bytes,
-        process_read_bytes=read_bytes,
-        process_write_bytes=write_bytes,
-    )
+@app.get("/metrics")
+def get_metrics_export() -> Response:
+    if not config.metrics_enabled or not metrics_exporter:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Metrics disabled")
+    payload, content_type = metrics_exporter.render()
+    return Response(content=payload, media_type=content_type)
 
 
 @app.exception_handler(Exception)
@@ -251,5 +266,10 @@ if frontend_path.exists():
 
 
 def _format_sse(entry) -> str:
-    payload = json.dumps(entry.dict())
+    if isinstance(entry, str):
+        payload = entry
+    elif hasattr(entry, "json"):
+        payload = entry.json()
+    else:
+        payload = json.dumps(entry, default=str)
     return f"data: {payload}\n\n"

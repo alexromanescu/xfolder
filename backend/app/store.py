@@ -32,9 +32,11 @@ from .models import (
     MemberContents,
     MismatchEntry,
     PhaseProgress,
+    PhaseTiming,
     ScanProgress,
     ScanRequest,
     ScanStatus,
+    ScanMetrics,
     SimilarityMatrixEntry,
     SimilarityMatrixResponse,
     TreemapNode,
@@ -50,6 +52,8 @@ from .scanner import (
     compute_similarity_groups,
     group_to_record,
 )
+from .metrics import MetricsExporter
+from .system import read_resource_sample
 
 
 class ScanJob:
@@ -72,10 +76,51 @@ class ScanJob:
         self.meta: Dict[str, str] = {"phase": "", "last_path": ""}
         self.matrix_entries: List[SimilarityMatrixEntry] = []
         self.treemap: Optional[TreemapNode] = None
+        self.phase_timings: Dict[str, PhaseTiming] = {}
+        self.phase_sequence: List[str] = []
+        self._current_phase: Optional[str] = None
+        self.resource_samples: List[ResourceSample] = []
+
+    def set_phase(self, name: str) -> None:
+        if self._current_phase == name:
+            return
+        if self._current_phase:
+            self.finish_phase(self._current_phase)
+        now = datetime.now(timezone.utc)
+        timing = PhaseTiming(phase=name, started_at=now)
+        self.phase_timings[name] = timing
+        self.phase_sequence.append(name)
+        self._current_phase = name
+        self.capture_resource_sample()
+
+    def finish_phase(self, name: Optional[str] = None) -> None:
+        target = name or self._current_phase
+        if not target:
+            return
+        timing = self.phase_timings.get(target)
+        if timing and timing.completed_at is None:
+            now = datetime.now(timezone.utc)
+            timing.completed_at = now
+            timing.duration_seconds = (now - timing.started_at).total_seconds()
+        if name is None or target == self._current_phase:
+            self._current_phase = None
+        self.capture_resource_sample()
+
+    def handle_phase_transition(self, name: str) -> None:
+        self.set_phase(name)
+
+    def capture_resource_sample(self) -> None:
+        sample = read_resource_sample()
+        self.resource_samples.append(sample)
 
 
 class ScanManager:
-    def __init__(self, app_config: AppConfig, executor_workers: int = 4) -> None:
+    def __init__(
+        self,
+        app_config: AppConfig,
+        executor_workers: int = 4,
+        metrics_exporter: Optional[MetricsExporter] = None,
+    ) -> None:
         self.config = app_config
         cache_path = (
             app_config.cache_db_path
@@ -88,6 +133,7 @@ class ScanManager:
         self._plans: Dict[str, DeletionPlan] = {}
         self._lock = threading.RLock()
         self._executor = ThreadPoolExecutorWithStop(max_workers=executor_workers)
+        self._metrics = metrics_exporter
 
     def start_scan(self, request: ScanRequest) -> ScanJob:
         scan_id = uuid.uuid4().hex[:12]
@@ -503,13 +549,49 @@ class ScanManager:
             return "\n".join(lines).encode("utf-8")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown export format")
 
+    def _update_active_metric(self) -> None:
+        if not self._metrics:
+            return
+        with self._lock:
+            active = sum(1 for job in self._jobs.values() if job.status == ScanStatus.RUNNING)
+        self._metrics.set_active_scans(active)
+
+    def _record_metrics(self, job: ScanJob) -> None:
+        if not self._metrics:
+            return
+        timings = [job.phase_timings[name] for name in job.phase_sequence if name in job.phase_timings]
+        self._metrics.record_scan(job.stats.get("bytes_scanned", 0), timings)
+
+    def get_metrics(self, scan_id: str) -> ScanMetrics:
+        job = self.get_job(scan_id)
+        timings = [job.phase_timings[name] for name in job.phase_sequence]
+        return ScanMetrics(
+            scan_id=job.scan_id,
+            root_path=job.request.root_path,
+            started_at=job.started_at,
+            completed_at=job.completed_at,
+            worker_count=job.stats.get("workers", 0),
+            bytes_scanned=job.stats.get("bytes_scanned", 0),
+            phase_timings=timings,
+            resource_samples=job.resource_samples,
+        )
+
     def _run_scan(self, job: ScanJob) -> None:
         job.status = ScanStatus.RUNNING
+        self._update_active_metric()
+        job.set_phase("walking")
         try:
             job.meta["phase"] = "walking"
-            scanner = FolderScanner(job.request, cache=self.file_cache, stats_sink=job.stats, meta_sink=job.meta)
+            scanner = FolderScanner(
+                job.request,
+                cache=self.file_cache,
+                stats_sink=job.stats,
+                meta_sink=job.meta,
+                phase_callback=job.handle_phase_transition,
+            )
             result = scanner.scan()
             job.meta["phase"] = "grouping"
+            job.set_phase("grouping")
             similarity_groups = compute_similarity_groups(
                 result.fingerprints,
                 job.request.similarity_threshold,
@@ -556,6 +638,8 @@ class ScanManager:
             job.stats = result.stats
             job.status = ScanStatus.COMPLETED
             job.completed_at = datetime.now(timezone.utc)
+            job.finish_phase()
+            self._record_metrics(job)
         except Exception as exc:  # pylint: disable=broad-except
             # Treat unexpected errors as warnings when we already
             # have a partial result, instead of failing the entire
@@ -574,6 +658,9 @@ class ScanManager:
                     message=str(exc),
                 )
             )
+        finally:
+            job.finish_phase()
+            self._update_active_metric()
 
 
 class ThreadPoolExecutorWithStop:

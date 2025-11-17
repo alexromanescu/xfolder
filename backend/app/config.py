@@ -51,6 +51,7 @@ class AppConfig(BaseModel):
     cache_db_path: Path | None = None
     log_level: str = Field(default="INFO")
     log_stream_enabled: bool = Field(default=False)
+    metrics_enabled: bool = Field(default=False)
 
     @classmethod
     def from_env(cls) -> "AppConfig":
@@ -58,6 +59,7 @@ class AppConfig(BaseModel):
         cache = os.getenv("XFS_CACHE_DB")
         log_level = os.getenv("XFS_LOG_LEVEL", "INFO").upper()
         log_stream = os.getenv("XFS_LOG_STREAM_ENABLED", "0") in {"1", "true", "TRUE"}
+        metrics_enabled = os.getenv("XFS_METRICS_ENABLED", "0") in {"1", "true", "TRUE"}
         return cls(
             listen_host=os.getenv("XFS_LISTEN_HOST", "0.0.0.0"),
             listen_port=int(os.getenv("XFS_LISTEN_PORT", "8080")),
@@ -65,4 +67,5 @@ class AppConfig(BaseModel):
             cache_db_path=Path(cache).expanduser().resolve() if cache else None,
             log_level=log_level,
             log_stream_enabled=log_stream,
+            metrics_enabled=metrics_enabled,
         )

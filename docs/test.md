@@ -18,6 +18,9 @@ This document tracks the automated and manual checks required to validate the Fo
 | T10 | Matrix adjacency projection | Similarity matrix flattens adjacency pairs in descending order. | `pytest -q tests/test_visualizations.py::test_similarity_matrix_entries_sorted` |
 | T11 | Duplicate-density treemap | Treemap aggregation rolls duplicate bytes up to ancestors. | `pytest -q tests/test_visualizations.py::test_treemap_rolls_up_duplicate_bytes` |
 | T12 | Frontend bootstrap | React app renders the landing state without runtime errors (catches use-before-init regressions). | `cd frontend && npm run test` |
+| T13 | Phase progress wiring | ScanProgress.phases exposes walking/aggregating/grouping with consistent statuses and ratios. | `pytest -q tests/test_progress_phases.py` |
+| T14 | Group contents endpoint | `/api/scans/{scan_id}/groups/{group_id}/contents` returns canonical + duplicate file lists. | `pytest -q tests/test_group_contents.py::test_group_contents_lists_folder_entries` |
+| T15 | API contracts (matrix/treemap/resources/logs/progress/metrics) | FastAPI regression tests for visualizations, diagnostics APIs, SSE streams, and Prometheus exporter. | `pytest -q tests/test_api_endpoints.py` |
 
 Run the full suite after changes:
 
@@ -31,11 +34,16 @@ PYTHONPATH=app pytest -q
 
 - **Frontend build parity**: `cd frontend && npm run build` should pass (catches TypeScript/React integration issues).
 - **Progress view**: While a scan runs, confirm folder/file counters increment, phase/last-path update, progress bar advances, and ETA updates.
+  - Confirm the three phase bars (Filesystem walk, Aggregation, Grouping) advance over time and show sensible percentages rather than jumping to 99% immediately.
+- **Push progress channel**: With the devtools Network tab open, verify the `/api/scans/events` SSE stream stays connected and the UI keeps updating without polling even when the tab is idle.
 - **Diff modal**: On a near-duplicate entry, hit **Compare** and verify the modal lists “only in” paths and mismatched sizes.
 - **Tree view**: Toggle to Tree, expand nodes, use search, and confirm stats/badges match expectations.
+- **Folder comparison**: For a group with duplicates, click **View comparison** and verify the Folder Comparison panel shows canonical + duplicate contents, with unique/mismatched entries highlighted and matching entries optionally hidden via the toggle.
 - **Similarity matrix view**: Switch to the Visual Insights → Matrix tab, hover entries, and confirm the percentage, reclaimable bytes, and group ids align with the table view.
 - **Duplicate-density treemap**: Switch to the Visual Insights → Treemap tab, ensure the bars roughly match duplicate-heavy folders, and clicking between scans refreshes the hierarchy.
 - **Diagnostics drawer**: Open Diagnostics from the header, confirm live logs stream (or that a helpful error message appears if streaming is disabled), and close the drawer.
+  - Verify the resource strip shows CPU load (% of cores), process RSS, and best-effort read/write I/O, and that it updates over time during a large scan.
+- **Metrics endpoints**: Hit `/api/scans/{scan_id}/metrics` to confirm per-phase durations/resource samples look reasonable, and fetch `/metrics` to ensure Prometheus scrapers can connect when enabled.
 - **Local scan smoke test**:
   1. Mount the target root (bind SMB/NFS via the host OS).
   2. `cd backend && source .venv/bin/activate`  

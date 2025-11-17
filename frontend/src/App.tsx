@@ -90,14 +90,17 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
+    let source: EventSource | null = null;
 
-    const load = async () => {
+    const bootstrap = async () => {
       try {
         const latest = await fetchScans();
         if (cancelled) return;
         setScans((prev) => (scansEqual(prev, latest) ? prev : latest));
         setSelectedScanId((prev) => {
-          if (prev) return prev;
+          if (prev && latest.some((scan) => scan.scan_id === prev)) {
+            return prev;
+          }
           return latest.length ? latest[0].scan_id : null;
         });
       } catch (cause) {
@@ -105,12 +108,40 @@ export default function App() {
       }
     };
 
-    load();
-    const timer = window.setInterval(load, 4000);
+    const connect = () => {
+      source?.close();
+      source = new EventSource("/api/scans/events");
+      source.onmessage = (event) => {
+        if (cancelled) return;
+        try {
+          const payload = JSON.parse(event.data) as { scans?: ScanProgress[] };
+          if (!payload.scans) return;
+          setScans((prev) => (scansEqual(prev, payload.scans!) ? prev : payload.scans!));
+          setSelectedScanId((prev) => {
+            if (prev && payload.scans!.some((scan) => scan.scan_id === prev)) {
+              return prev;
+            }
+            return payload.scans!.length ? payload.scans![0].scan_id : null;
+          });
+        } catch (cause) {
+          console.error("Failed to parse scan progress event", cause);
+        }
+      };
+      source.onerror = () => {
+        if (cancelled) return;
+        source?.close();
+        window.setTimeout(() => {
+          if (!cancelled) connect();
+        }, 4000);
+      };
+    };
+
+    bootstrap();
+    connect();
 
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      source?.close();
     };
   }, []);
 

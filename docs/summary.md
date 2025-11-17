@@ -6,13 +6,25 @@ This file captures the high-level state after the recent enhancements so we can 
 
 - **Live Scan Telemetry**
   - `ScanProgress` includes `phase` (`walking`, `aggregating`, `grouping`) and `last_path`, plus streaming folder/file counts.
-  - Frontend progress card shows counters, progress bar, ETA, and phase details.
+  - Frontend progress card shows counters, overall progress bar, phase-specific progress bars with status icons, and ETA.
 - **Diff Endpoint & Modal**
   - REST: `GET /api/scans/{scan_id}/groups/{group_id}/diff` returns `only_left`, `only_right`, and `mismatched` entries (derived from aggregated fingerprints).
   - UI exposes “Compare” per near-duplicate member; modal renders side-by-side differences with byte stats.
 - **Similarity Group Tree View**
   - Added List/Tree toggle. Tree aggregates bytes, identical/near counts, and reclaimable bytes per folder; supports search + expand/collapse.
-  - Foundation for future Matrix/Treemap views (treemap will color by duplicate density).
+  - Tree shows only canonical/reference folders as nodes; duplicates are surfaced inline per row and in the comparison panel.
+- **Visual Insights & Comparison**
+  - Similarity Matrix view backed by `GET /api/scans/{scan_id}/matrix`, showing top-K adjacency pairs with a heatmap-like list.
+  - Duplicate-density Treemap backed by `GET /api/scans/{scan_id}/density/treemap`, summarizing duplicate bytes per folder hierarchy.
+  - Folder Comparison panel renders canonical + duplicates side-by-side, with a file-explorer-style list for each member and color-coded highlights for unique and mismatched entries; includes a toggle to hide/show matching files.
+- **Diagnostics & Observability**
+  - SSE log streaming via `GET /api/system/logs/stream`, wired into a Diagnostics drawer in the UI.
+  - Resource snapshot endpoint `GET /api/system/resources` surfaces CPU cores/load, process RSS, and best-effort I/O bytes; diagnostics drawer polls this and shows a live resource strip.
+  - Backend scan runner records warnings instead of failing scans when late-phase errors occur, so completed scans remain inspectable even if secondary analytics fail.
+- **Push Progress & Metrics**
+  - `/api/scans/events` streams scan progress over SSE so the UI updates instantly without the 4s poll loop; the React app auto-reconnects and falls back gracefully.
+  - `/api/scans/{scan_id}/metrics` now exposes per-phase durations, bytes scanned, worker allocation, and resource samples captured during each phase.
+  - Optional `/metrics` endpoint (gated by `XFS_METRICS_ENABLED=1`) serves Prometheus-compatible gauges for phase durations, bytes scanned, total scans, and active scan counts.
 
 ## Key Tests / Validation
 
@@ -21,25 +33,25 @@ This file captures the high-level state after the recent enhancements so we can 
 
 ## Next Steps / Roadmap
 
-1. **Similarity Matrix View**: implement adjacency endpoint + heatmap for top-K duplicates.
-2. **Duplicate-density Treemap**: summary endpoint feeding zoomable treemap.
-3. **Enhanced logging**: optional server-side verbosity/log streaming to debug stuck scans.
+1. **Adaptive Scaling & Pruning**: now that per-phase timings and bytes scanned are recorded, teach the scheduler to raise/lower worker counts and tweak candidate pruning thresholds based on live metrics, especially on >10M file trees.
+2. **Progress Channel Polish**: expand the SSE stream with scan-level diff summaries (e.g., recently completed groups) and add pagination-aware deltas so very large scan lists don’t flood the client; document proxy/timeout guidance for operators.
+3. **Operations & Alerting**: ship Grafana-ready dashboards for the new metrics, describe alert thresholds (active scan saturation, slow phases), and add CLI helpers that dump `/api/scans/{scan_id}/metrics` snapshots for support cases.
 
 ## Implementation Plan
 
-### 1. Similarity Matrix View
-- **Backend**: extend scan persistence to store the top-K adjacency pairs per group (reuse current `pairwise_similarity` computation but flatten into a `matrix` table keyed by `scan_id` + folder ids). Add FastAPI models/routes for `GET /api/scans/{scan_id}/matrix`, supporting pagination, similarity filters, and the existing filter metadata defined in `docs/prd.md`.
-- **Frontend**: create a dedicated `SimilarityMatrix` feature (fetch hook + heatmap component) that reads the new endpoint, sorts folders by reclaimable bytes, and links each cell to the existing diff modal for quick inspection.
-- **Validation**: add backend unit tests that synthesize adjacency fixtures, API contract tests to verify pagination/suppression, and a manual QA step covering the heatmap rendering plus navigation back to the tree/list views.
+### 1. Adaptive Scaling & Pruning
+- **Backend**: leverage the new phase timings/bytes stats to auto-adjust worker counts and quick-sketch thresholds mid-scan; expose tunables via `ScanRequest` so ops can cap CPU impact for noisy neighbors.
+- **Frontend**: add a lightweight “Performance” drawer per scan metrics view so operators can see how concurrency changed over time.
+- **Validation**: synthesize large mock trees in `backend/tests/` to prove adaptive tuning keeps throughput consistent while respecting CPU limits.
 
-### 2. Duplicate-density Treemap
-- **Backend**: add an aggregate service plus cached summary blob per scan with per-folder byte totals, identical/near counts, and reclaimable bytes so treemap queries do not recompute heavy stats. Expose `GET /api/scans/{scan_id}/density/treemap` with filters mirroring the matrix endpoint.
-- **Frontend**: implement a treemap canvas alongside the Tree/List toggle, offering zoom/pan and color-coding by duplicate density; selecting a node should filter the main group list.
-- **Validation**: expand the automated suite with aggregation-accuracy tests (confirm totals respect ignore globs and suppression rules), snapshot a mocked treemap view in Vitest, and append a manual checklist entry verifying zoom/search interactions.
+### 2. Progress Channel Enhancements
+- **Backend**: enrich the SSE payload with incremental change sets (state + deltas) so future UIs can virtualize scan lists; add heartbeat events and document recommended proxy timeouts for long connections.
+- **Frontend**: introduce a `useScanEvents` hook that buffers SSE traffic and hydrates local caches, plus toast warnings when the stream reconnects repeatedly.
+- **Validation**: expand Vitest/MSW coverage for SSE reconnects and add a manual check that toggling between networks doesn’t drop state.
 
-### 3. Enhanced Logging & Diagnostics
-- **Backend**: introduce configurable logging verbosity (`XFS_LOG_LEVEL`, streaming toggle) and emit structured events for scan phases, cache hits, and quarantine operations. Provide an opt-in `/api/system/logs` stream (SSE/WebSocket) gated behind the new config.
-- **Frontend**: surface a diagnostics drawer under the progress card that subscribes to the log stream, offers filtering/download, and degrades cleanly when logging is off.
-- **Validation**: add integration tests that mock the streaming sink, ensure toggles take effect via env overrides, and document a manual step to watch logs while a scan runs. Close with the standard regression pass: `make test-backend` and `npm run build`.
+### 3. Metrics Dashboards & Alerts
+- **Backend**: publish example Prometheus recording rules for slow phases/overdue scans, add histogram buckets for long-running phases, and expose a support CLI that snapshots `/api/scans/{scan_id}/metrics`.
+- **Docs/Tooling**: provide Grafana JSON dashboards + runbooks for alert tuning, and link them from `docs/test.md` so QA covers observability wiring.
+- **Validation**: run `pytest -q tests/test_api_endpoints.py` plus end-to-end drills that hit `/metrics` from a Prometheus container.
 
 Refer to this summary along with `docs/prd.md` (requirements) and `docs/test.md` (QA plan) when rebooting work.
