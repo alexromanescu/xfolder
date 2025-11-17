@@ -20,6 +20,7 @@ from .models import (
     FileEqualityMode,
     FileRecord,
     FolderLabel,
+    FolderRecord,
     GroupDiff,
     MismatchEntry,
     PairwiseSimilarity,

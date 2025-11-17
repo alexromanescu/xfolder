@@ -359,8 +359,8 @@ class ScanManager:
         )
 
         return GroupDiff(
-            left=left_member,
-            right=right_member,
+            left=folder_info_to_record(left_member),
+            right=folder_info_to_record(right_member),
             only_left=diff.only_left,
             only_right=diff.only_right,
             mismatched=diff.mismatched,

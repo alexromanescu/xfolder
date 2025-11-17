@@ -37,7 +37,7 @@ export function ComparisonPanel({ group, entries, loading, contents, showMatches
   const canonicalSummary = buildCanonicalSummary(entries);
 
   return (
-    <div className="panel comparison-panel">
+    <div className="comparison-panel">
       <div className="panel-header">
         <div>
           <div className="panel-title">Folder Comparison</div>
@@ -49,54 +49,56 @@ export function ComparisonPanel({ group, entries, loading, contents, showMatches
           Clear selection
         </button>
       </div>
-      {duplicates.length === 0 ? (
-        <p className="muted">This folder does not have duplicates to compare.</p>
-      ) : (
-        <>
-          <div className="comparison-toolbar">
-            <label>
-              <input type="checkbox" checked={showMatches} onChange={onToggleShowMatches} /> Show matching files
-            </label>
-          </div>
-          <div className="comparison-grid">
-            <div className="comparison-card canonical">
-              <div className="comparison-card-title">Canonical</div>
-              <FolderSummary relativePath={canonical.relative_path} totalBytes={canonical.total_bytes} fileCount={canonical.file_count} />
-              <FolderContent
-                variant="canonical"
-                onlyEntries={canonicalSummary.only}
-                changedEntries={canonicalSummary.changed}
-                allEntries={canonicalEntries}
-                showMatches={showMatches}
-                loading={loading}
-              />
+      <div className="comparison-panel-inner">
+        {duplicates.length === 0 ? (
+          <p className="muted">This folder does not have duplicates to compare.</p>
+        ) : (
+          <>
+            <div className="comparison-toolbar">
+              <label>
+                <input type="checkbox" checked={showMatches} onChange={onToggleShowMatches} /> Show matching files
+              </label>
             </div>
-            {duplicates.map((member) => {
-              const entry = entryLookup.get(member.relative_path);
-              const memberEntries = duplicateEntries.get(member.relative_path)?.entries ?? [];
-              return (
-                <div className="comparison-card" key={member.relative_path}>
-                  <div className="comparison-card-title">Duplicate</div>
-                  <FolderSummary
-                    relativePath={member.relative_path}
-                    totalBytes={member.total_bytes}
-                    fileCount={member.file_count}
-                    unstable={member.unstable}
-                  />
-                  <FolderContent
-                    variant="duplicate"
-                    diff={entry?.diff}
-                    error={entry?.error}
-                    allEntries={memberEntries}
-                    showMatches={showMatches}
-                    loading={loading}
-                  />
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
+            <div className="comparison-grid">
+              <div className="comparison-card canonical">
+                <div className="comparison-card-title">Canonical</div>
+                <FolderSummary relativePath={canonical.relative_path} totalBytes={canonical.total_bytes} fileCount={canonical.file_count} />
+                <FolderContent
+                  variant="canonical"
+                  onlyEntries={canonicalSummary.only}
+                  changedEntries={canonicalSummary.changed}
+                  allEntries={canonicalEntries}
+                  showMatches={showMatches}
+                  loading={loading}
+                />
+              </div>
+              {duplicates.map((member) => {
+                const entry = entryLookup.get(member.relative_path);
+                const memberEntries = duplicateEntries.get(member.relative_path)?.entries ?? [];
+                return (
+                  <div className="comparison-card" key={member.relative_path}>
+                    <div className="comparison-card-title">Duplicate</div>
+                    <FolderSummary
+                      relativePath={member.relative_path}
+                      totalBytes={member.total_bytes}
+                      fileCount={member.file_count}
+                      unstable={member.unstable}
+                    />
+                    <FolderContent
+                      variant="duplicate"
+                      diff={entry?.diff}
+                      error={entry?.error}
+                      allEntries={memberEntries}
+                      showMatches={showMatches}
+                      loading={loading}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

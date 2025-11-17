@@ -606,10 +606,9 @@ export default function App() {
           <div className="panel">
             <div className="panel-header">
               <div>
-                <div className="panel-title">Similarity Groups</div>
+                <div className="panel-title">Similarity Explorer</div>
                 <p className="muted">
-                  Toggle between identical clones and near matches. Select folders to plan a safe
-                  quarantine move.
+                  Review duplicate groups on the left and inspect detailed folder comparisons on the right.
                 </p>
               </div>
               <div className="panel-actions">
@@ -636,71 +635,104 @@ export default function App() {
                 </button>
               </div>
             </div>
-            <div className="tab-strip">
-              {TAB_ORDER.map((tab) => (
-                <div
-                  key={tab}
-                  className={`tab ${activeTab === tab ? "active" : ""}`}
-                  onClick={() => setActiveTab(tab)}
-                  role="tab"
-                >
-                  {tab === "identical"
-                    ? "Identical"
-                    : tab === "near_duplicate"
-                      ? "Near Duplicate"
-                      : "Overlap Explorer"}
+            <div className="groups-comparison-layout">
+              <div className="groups-panel">
+                <div className="tab-strip">
+                  {TAB_ORDER.map((tab) => (
+                    <div
+                      key={tab}
+                      className={`tab ${activeTab === tab ? "active" : ""}`}
+                      onClick={() => setActiveTab(tab)}
+                      role="tab"
+                    >
+                      {tab === "identical"
+                        ? "Identical"
+                        : tab === "near_duplicate"
+                          ? "Near Duplicate"
+                          : "Overlap Explorer"}
+                    </div>
+                  ))}
+                  <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                    <button
+                      className={`button secondary`}
+                      type="button"
+                      onClick={() => setViewMode("list")}
+                    >
+                      List
+                    </button>
+                    <button
+                      className={`button secondary`}
+                      type="button"
+                      onClick={() => setViewMode("tree")}
+                    >
+                      Tree
+                    </button>
+                  </div>
                 </div>
-              ))}
-              <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-                <button className={`button secondary`} type="button" onClick={() => setViewMode("list")}>List</button>
-                <button className={`button secondary`} type="button" onClick={() => setViewMode("tree")}>Tree</button>
+                <div className="groups-table-shell">
+                  {loadingGroups ? (
+                    <p className="muted" style={{ padding: 12 }}>
+                      Loading groups…
+                    </p>
+                  ) : viewMode === "list" ? (
+                    <GroupTable
+                      groups={currentGroups}
+                      rootPath={currentScan.root_path}
+                      selected={selectedPaths}
+                      onToggle={togglePath}
+                      emptyLabel="No matches detected for this view yet."
+                      onCompare={handleCompare}
+                      onSelectGroup={handleSelectGroup}
+                      selectedGroupId={selectedGroupId}
+                    />
+                  ) : (
+                    <TreeView
+                      rootPath={currentScan.root_path}
+                      groups={currentGroups}
+                      onSelectGroup={handleSelectGroup}
+                      selectedGroupId={selectedGroupId}
+                    />
+                  )}
+                </div>
+                <div style={{ marginTop: 12, display: "flex", gap: 12, alignItems: "center" }}>
+                  <button
+                    className="button primary"
+                    type="button"
+                    disabled={!selectedPaths.size || !!plan}
+                    onClick={handlePlan}
+                  >
+                    Plan Quarantine ({selectedPaths.size})
+                  </button>
+                  {plan ? (
+                    <button
+                      className="button danger"
+                      type="button"
+                      onClick={handleConfirmPlan}
+                    >
+                      Confirm &amp; Move ({humanBytes(plan.reclaimable_bytes)})
+                    </button>
+                  ) : null}
+                  {plan ? (
+                    <span className="muted">
+                      Token {plan.token.substring(0, 8)}… expires {formatDate(plan.expires_at)}
+                    </span>
+                  ) : null}
+                  {planResult ? (
+                    <span className="pill">
+                      Moved {planResult.moved_count} items · {humanBytes(planResult.bytes_moved)}
+                    </span>
+                  ) : null}
+                </div>
               </div>
-            </div>
-            {loadingGroups ? (
-              <p className="muted">Loading groups…</p>
-            ) : viewMode === "list" ? (
-              <GroupTable
-                groups={currentGroups}
-                rootPath={currentScan.root_path}
-                selected={selectedPaths}
-                onToggle={togglePath}
-                emptyLabel="No matches detected for this view yet."
-                onCompare={handleCompare}
-                onSelectGroup={handleSelectGroup}
-                selectedGroupId={selectedGroupId}
+              <ComparisonPanel
+                group={selectedComparisonGroup}
+                entries={comparisonEntries}
+                contents={comparisonContents}
+                loading={comparisonLoading}
+                showMatches={showMatchingEntries}
+                onToggleShowMatches={() => setShowMatchingEntries((prev) => !prev)}
+                onClear={() => setSelectedGroupId(null)}
               />
-            ) : (
-              <TreeView
-                rootPath={currentScan.root_path}
-                groups={currentGroups}
-                onSelectGroup={handleSelectGroup}
-                selectedGroupId={selectedGroupId}
-              />
-            )}
-            <div style={{ marginTop: 18, display: "flex", gap: 12 }}>
-              <button
-                className="button primary"
-                type="button"
-                disabled={!selectedPaths.size || !!plan}
-                onClick={handlePlan}
-              >
-                Plan Quarantine ({selectedPaths.size})
-              </button>
-              {plan ? (
-                <button className="button danger" type="button" onClick={handleConfirmPlan}>
-                  Confirm &amp; Move ({humanBytes(plan.reclaimable_bytes)})
-                </button>
-              ) : null}
-              {plan ? (
-                <span className="muted">
-                  Token {plan.token.substring(0, 8)}… expires {formatDate(plan.expires_at)}
-                </span>
-              ) : null}
-              {planResult ? (
-                <span className="pill">
-                  Moved {planResult.moved_count} items · {humanBytes(planResult.bytes_moved)}
-                </span>
-              ) : null}
             </div>
           </div>
         ) : (
@@ -709,17 +741,6 @@ export default function App() {
             <p className="muted">Run a scan to populate this view.</p>
           </div>
         )}
-        {currentScan?.status === "completed" ? (
-          <ComparisonPanel
-            group={selectedComparisonGroup}
-            entries={comparisonEntries}
-            contents={comparisonContents}
-            loading={comparisonLoading}
-            showMatches={showMatchingEntries}
-            onToggleShowMatches={() => setShowMatchingEntries((prev) => !prev)}
-            onClear={() => setSelectedGroupId(null)}
-          />
-        ) : null}
 
         {insightsAvailable ? (
           <div className="panel">

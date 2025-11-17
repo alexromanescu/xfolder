@@ -551,6 +551,46 @@ select:focus {
   gap: 8px;
   justify-self: end;
 }
+
+.groups-comparison-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 55%) minmax(0, 45%);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.groups-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.groups-table-shell {
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(15, 23, 42, 0.45);
+  max-height: 520px;
+  overflow: auto;
+}
+
+.comparison-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(15, 23, 42, 0.45);
+  padding: 16px;
+  overflow: hidden;
+}
+
+.comparison-panel-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  max-height: 520px;
+}
 .tree-duplicates {
   padding: 8px 0 12px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.08);
@@ -940,6 +980,16 @@ select:focus {
   .panel-actions {
     width: 100%;
     flex-wrap: wrap;
+  }
+
+  .groups-comparison-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .groups-table-shell,
+  .comparison-panel,
+  .comparison-panel-inner {
+    max-height: none;
   }
 
   .input-row {
