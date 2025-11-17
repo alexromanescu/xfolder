@@ -118,21 +118,39 @@ class ScanManager:
         now = datetime.now(timezone.utc)
 
         walking_ratio = None
+        aggregating_ratio = None
+        grouping_ratio = None
         scanned = stats_snapshot.get("folders_scanned", 0)
         discovered = stats_snapshot.get("folders_discovered", 0)
         discovered = max(discovered, scanned if scanned > 0 else 1)
         if discovered > 0:
             walking_ratio = scanned / discovered
 
+        total_folders = stats_snapshot.get("total_folders", 0)
+        folders_aggregated = stats_snapshot.get("folders_aggregated", 0)
+        if total_folders > 0:
+            aggregating_ratio = min(1.0, max(0.0, folders_aggregated / total_folders))
+
+        pairs_total = stats_snapshot.get("similarity_pairs_total", 0)
+        pairs_processed = stats_snapshot.get("similarity_pairs_processed", 0)
+        if pairs_total > 0:
+            grouping_ratio = min(1.0, max(0.0, pairs_processed / pairs_total))
+
         if job.status == ScanStatus.COMPLETED:
             progress = 1.0
             eta_seconds = 0
         elif job.status == ScanStatus.RUNNING:
+            # Blend the three phases into a single progress estimate.
+            # Walking: 40%, Aggregation: 30%, Grouping: 30%.
+            overall = 0.0
             if walking_ratio is not None:
-                # Treat filesystem walking as ~90% of the work so the
-                # progress bar does not jump to 99% too early while
-                # grouping/similarity is still running.
-                progress = min(0.9, max(0.05, walking_ratio * 0.9))
+                overall += 0.4 * walking_ratio
+            if aggregating_ratio is not None:
+                overall += 0.3 * aggregating_ratio
+            if grouping_ratio is not None:
+                overall += 0.3 * grouping_ratio
+            if overall > 0:
+                progress = max(0.05, min(0.99, overall))
             elapsed = (now - job.started_at).total_seconds()
             if elapsed > 0 and scanned > 0:
                 rate = scanned / elapsed
@@ -152,6 +170,10 @@ class ScanManager:
             if current_phase == name:
                 if name == "walking" and walking_ratio is not None:
                     return "running", walking_ratio
+                if name == "aggregating" and aggregating_ratio is not None:
+                    return "running", aggregating_ratio
+                if name == "grouping" and grouping_ratio is not None:
+                    return "running", grouping_ratio
                 return "running", None
             # Determine ordering by index in phase_names
             try:

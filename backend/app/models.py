@@ -223,6 +223,14 @@ class LogEntry(BaseModel):
     logger: str
 
 
+class ResourceStats(BaseModel):
+    cpu_cores: int
+    load_1m: float
+    process_rss_bytes: int
+    process_read_bytes: Optional[int] = None
+    process_write_bytes: Optional[int] = None
+
+
 class FolderEntry(BaseModel):
     path: str
     bytes: int

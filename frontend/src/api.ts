@@ -42,6 +42,14 @@ export interface PhaseProgress {
   progress?: number | null;
 }
 
+export interface ResourceStats {
+  cpu_cores: number;
+  load_1m: number;
+  process_rss_bytes: number;
+  process_read_bytes?: number | null;
+  process_write_bytes?: number | null;
+}
+
 export interface FolderRecord {
   path: string;
   relative_path: string;
@@ -267,5 +275,10 @@ export async function fetchTreemap(scanId: string): Promise<TreemapResponse> {
 
 export async function fetchGroupContents(scanId: string, groupId: string): Promise<GroupContents> {
   const response = await api.get<GroupContents>(`/scans/${scanId}/groups/${groupId}/contents`);
+  return response.data;
+}
+
+export async function fetchResources(): Promise<ResourceStats> {
+  const response = await api.get<ResourceStats>("/system/resources");
   return response.data;
 }

@@ -847,6 +847,15 @@ select:focus {
   margin-bottom: 4px;
 }
 
+.resource-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--text-500);
+  margin-bottom: 8px;
+}
+
 .progress-bar {
   position: relative;
   height: 12px;

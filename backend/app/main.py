@@ -23,6 +23,7 @@ from .models import (
     GroupContents,
     GroupDiff,
     GroupRecord,
+    ResourceStats,
     ScanProgress,
     ScanRequest,
     SimilarityMatrixResponse,
@@ -195,6 +196,44 @@ async def stream_logs(level: Optional[str] = Query(default=None)):
             log_stream_handler.unsubscribe((queue, loop))
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.get("/api/system/resources", response_model=ResourceStats)
+def get_resources() -> ResourceStats:
+    import os
+    import resource
+
+    cpu_cores = os.cpu_count() or 1
+    try:
+        load_1m = os.getloadavg()[0]
+    except (OSError, AttributeError):
+        load_1m = 0.0
+
+    usage = resource.getrusage(resource.RUSAGE_SELF)
+    # ru_maxrss is kilobytes on Linux, bytes on macOS; normalize to bytes.
+    rss_kb = usage.ru_maxrss
+    process_rss_bytes = int(rss_kb * 1024)
+
+    read_bytes = None
+    write_bytes = None
+    try:
+        with open("/proc/self/io", "r", encoding="utf-8") as fh:  # Linux only
+            for line in fh:
+                if line.startswith("read_bytes:"):
+                    read_bytes = int(line.split()[1])
+                elif line.startswith("write_bytes:"):
+                    write_bytes = int(line.split()[1])
+    except OSError:
+        read_bytes = None
+        write_bytes = None
+
+    return ResourceStats(
+        cpu_cores=cpu_cores,
+        load_1m=float(load_1m),
+        process_rss_bytes=process_rss_bytes,
+        process_read_bytes=read_bytes,
+        process_write_bytes=write_bytes,
+    )
 
 
 @app.exception_handler(Exception)
