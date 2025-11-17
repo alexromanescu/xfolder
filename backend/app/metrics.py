@@ -1,8 +1,21 @@
 from __future__ import annotations
 
-from typing import Iterable
+from importlib import import_module
+from typing import Iterable, TYPE_CHECKING
 
-from prometheus_client import CONTENT_TYPE_LATEST, CollectorRegistry, Counter, Gauge, generate_latest
+if TYPE_CHECKING:  # pragma: no cover - used only by type checkers
+    from prometheus_client import CONTENT_TYPE_LATEST as _CONTENT_TYPE
+    from prometheus_client import Counter, Gauge, CollectorRegistry, generate_latest as _generate_latest
+else:  # Lazy import so IDEs without the dependency stop flagging the module
+    _prometheus = import_module("prometheus_client")
+    _CONTENT_TYPE = getattr(_prometheus, "CONTENT_TYPE_LATEST", "text/plain")
+    CollectorRegistry = getattr(_prometheus, "CollectorRegistry")
+    Counter = getattr(_prometheus, "Counter")
+    Gauge = getattr(_prometheus, "Gauge")
+    _generate_latest = getattr(_prometheus, "generate_latest")
+
+CONTENT_TYPE_LATEST = _CONTENT_TYPE
+generate_latest = _generate_latest
 
 from .models import PhaseTiming
 
