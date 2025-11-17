@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 from .cache import FileHashCache, FileCacheKey
+from .domain import FolderInfo
 from .models import (
     DirectoryFingerprint,
     DivergenceRecord,
@@ -19,7 +20,6 @@ from .models import (
     FileEqualityMode,
     FileRecord,
     FolderLabel,
-    FolderRecord,
     GroupDiff,
     MismatchEntry,
     PairwiseSimilarity,
@@ -33,9 +33,19 @@ from .models import (
 HASH_CHUNK_SIZE = 4 * 1024 * 1024
 
 
+def _to_folder_record(info: FolderInfo) -> FolderRecord:
+    return FolderRecord(
+        path=info.path,
+        relative_path=info.relative_path,
+        total_bytes=info.total_bytes,
+        file_count=info.file_count,
+        unstable=info.unstable,
+    )
+
+
 @dataclass
 class ScanResult:
-    folders: Dict[str, FolderRecord]
+    folders: Dict[str, FolderInfo]
     fingerprints: Dict[str, DirectoryFingerprint]
     warnings: List[WarningRecord]
     stats: Dict[str, int]
@@ -66,7 +76,7 @@ class FolderScanner:
 
     def scan(self) -> ScanResult:
         root = self.request.root_path
-        folders: Dict[str, FolderRecord] = {}
+        folders: Dict[str, FolderInfo] = {}
         fingerprints: Dict[str, DirectoryFingerprint] = {}
 
         if not root.is_dir():
@@ -111,8 +121,8 @@ class FolderScanner:
                         files.append(record)
                         total_size += record.size
 
-                folder_record = FolderRecord(
-                    path=current,
+                folder_record = FolderInfo(
+                    path=str(current),
                     relative_path=rel_dir.as_posix() if rel_dir != Path(".") else ".",
                     total_bytes=total_size,
                     file_count=len(files),
@@ -299,7 +309,7 @@ class FolderScanner:
                     return None, False
         return digest, True
 
-    def _build_fingerprint(self, folder: FolderRecord, files: List[FileRecord]) -> DirectoryFingerprint:
+    def _build_fingerprint(self, folder: FolderInfo, files: List[FileRecord]) -> DirectoryFingerprint:
         weights: Dict[str, int] = defaultdict(int)
         folder_prefix = Path(folder.relative_path) if folder.relative_path != "." else None
 
@@ -362,7 +372,7 @@ def aggregate_fingerprints(
         if stats is not None:
             stats["folders_aggregated"] = index
         if meta is not None:
-            meta["last_path"] = str(fingerprint.folder.path)
+            meta["last_path"] = fingerprint.folder.path
     return aggregated
 
 
@@ -396,8 +406,8 @@ def compute_fingerprint_diff(
     mismatched.sort(key=lambda entry: entry.path)
 
     return GroupDiff(
-        left=left.folder,
-        right=right.folder,
+        left=_to_folder_record(left.folder),
+        right=_to_folder_record(right.folder),
         only_left=only_left,
         only_right=only_right,
         mismatched=mismatched,
@@ -485,7 +495,7 @@ def weighted_jaccard(a: Dict[str, int], b: Dict[str, int]) -> float:
 class SimilarityGroup:
     def __init__(
         self,
-        members: List[FolderRecord],
+        members: List[FolderInfo],
         similarity_pairs: List[PairwiseSimilarity],
     ) -> None:
         self.members = members
@@ -501,7 +511,7 @@ def merge_groups(groups: List[SimilarityGroup], threshold: float) -> List[Simila
     if not groups:
         return []
     adjacency: Dict[str, Set[str]] = defaultdict(set)
-    folder_lookup: Dict[str, FolderRecord] = {}
+    folder_lookup: Dict[str, FolderInfo] = {}
     pairs: Dict[Tuple[str, str], float] = {}
 
     for group in groups:
@@ -577,10 +587,10 @@ def group_to_record(
     group: SimilarityGroup,
     label: FolderLabel,
     fingerprints: Dict[str, DirectoryFingerprint],
-) -> Tuple[str, List[FolderRecord], List[PairwiseSimilarity], List[DivergenceRecord]]:
-    members = sorted(group.members, key=lambda f: (len(f.path.as_posix()), f.path.as_posix()))
+) -> Tuple[str, List[FolderInfo], List[PairwiseSimilarity], List[DivergenceRecord]]:
+    members = sorted(group.members, key=lambda f: (len(f.path), f.path))
     canonical = members[0]
-    group_uuid = uuid.uuid5(uuid.NAMESPACE_URL, canonical.path.as_posix())
+    group_uuid = uuid.uuid5(uuid.NAMESPACE_URL, canonical.path)
     group_id = f"g_{group_uuid.hex[:8]}"
     divergences: List[DivergenceRecord] = []
 

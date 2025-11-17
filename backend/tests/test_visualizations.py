@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import List, Tuple
 
 from app.analytics import build_similarity_matrix, build_treemap
-from app.models import FolderLabel, GroupRecord, ScanRequest, TreemapNode
+from app.models import FolderLabel, FolderRecord, GroupRecord, ScanRequest, TreemapNode
 from app.scanner import FolderScanner, classify_groups, compute_similarity_groups, group_to_record
 from app.store import _suppress_descendant_groups_all
 
@@ -29,11 +29,12 @@ def _build_case(tmp_path: Path) -> Tuple[List[Tuple[FolderLabel, GroupRecord]], 
     for label, label_groups in classified.items():
         for group, _ in label_groups:
             group_id, members, pairs, divergences = group_to_record(group, label, result.fingerprints)
+            members_model = [_to_folder_record(member) for member in members]
             record = GroupRecord(
                 group_id=group_id,
                 label=label,
-                canonical_path=members[0].path,
-                members=members,
+                canonical_path=members_model[0].path,
+                members=members_model,
                 pairwise_similarity=pairs,
                 divergences=divergences,
                 suppressed_descendants=False,
@@ -74,3 +75,11 @@ def _find_node(node: TreemapNode, target: str) -> TreemapNode | None:
         if match:
             return match
     return None
+def _to_folder_record(info):
+    return FolderRecord(
+        path=info.path,
+        relative_path=info.relative_path,
+        total_bytes=info.total_bytes,
+        file_count=info.file_count,
+        unstable=info.unstable,
+    )

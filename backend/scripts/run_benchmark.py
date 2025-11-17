@@ -27,6 +27,7 @@ from app.models import (  # noqa: E402
     ScanStatus,
     StructurePolicy,
 )
+from app.domain import FolderInfo  # noqa: E402
 from app.store import ScanJob, ScanManager  # noqa: E402
 from app.system import read_resource_stats  # noqa: E402
 
@@ -223,6 +224,7 @@ class ObjectCensusSampler:
                     "FolderRecord": 0,
                     "GroupRecord": 0,
                     "DirectoryFingerprint": 0,
+                    "FolderInfo": 0,
                     "Path": 0,
                 }
                 for obj in gc.get_objects():
@@ -233,6 +235,8 @@ class ObjectCensusSampler:
                             counts["GroupRecord"] += 1
                         elif isinstance(obj, DirectoryFingerprint):
                             counts["DirectoryFingerprint"] += 1
+                        elif isinstance(obj, FolderInfo):
+                            counts["FolderInfo"] += 1
                         elif isinstance(obj, Path):
                             counts["Path"] += 1
                     except ReferenceError:
@@ -506,7 +510,16 @@ def print_summary(summary: Dict[str, Any]) -> None:
             offset = entry.get("seconds_since_start")
             offset_text = f"{offset:.2f}s" if isinstance(offset, (int, float)) else "n/a"
             counts = entry.get("counts", {})
-            print(f"  - +{offset_text} FolderRecord={counts.get('FolderRecord',0)} GroupRecord={counts.get('GroupRecord',0)} DirectoryFingerprint={counts.get('DirectoryFingerprint',0)} Path={counts.get('Path',0)}")
+            print(
+                "  - +{offset} FolderRecord={fr} FolderInfo={fi} GroupRecord={gr} DirectoryFingerprint={df} Path={pth}".format(
+                    offset=offset_text,
+                    fr=counts.get("FolderRecord", 0),
+                    fi=counts.get("FolderInfo", 0),
+                    gr=counts.get("GroupRecord", 0),
+                    df=counts.get("DirectoryFingerprint", 0),
+                    pth=counts.get("Path", 0),
+                )
+            )
     smaps = summary.get("smaps_samples") or []
     if smaps:
         print("smaps_rollup samples:")

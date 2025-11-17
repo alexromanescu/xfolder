@@ -31,14 +31,14 @@ from app.models import (
 class _StubScanManager:
     def __init__(self) -> None:
         left = FolderRecord(
-            path=Path("/data/canonical"),
+            path="/data/canonical",
             relative_path="canonical",
             total_bytes=200,
             file_count=12,
             unstable=False,
         )
         right = FolderRecord(
-            path=Path("/data/duplicate"),
+            path="/data/duplicate",
             relative_path="duplicate",
             total_bytes=120,
             file_count=10,

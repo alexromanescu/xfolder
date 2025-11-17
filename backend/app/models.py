@@ -8,6 +8,7 @@ from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, validator
 
+from .domain import FolderInfo
 
 class FileEqualityMode(str, Enum):
     NAME_SIZE = "name_size"
@@ -65,7 +66,7 @@ class FileRecord(BaseModel):
 
 
 class FolderRecord(BaseModel):
-    path: Path
+    path: str
     relative_path: str
     total_bytes: int
     file_count: int
@@ -87,7 +88,7 @@ class DivergenceRecord(BaseModel):
 class GroupRecord(BaseModel):
     group_id: str
     label: FolderLabel
-    canonical_path: Path
+    canonical_path: str
     members: List[FolderRecord]
     pairwise_similarity: List[PairwiseSimilarity]
     divergences: List[DivergenceRecord]
@@ -275,7 +276,7 @@ class GroupContents(BaseModel):
 
 @dataclass
 class DirectoryFingerprint:
-    folder: FolderRecord
+    folder: FolderInfo
     file_weights: Dict[str, int]
 
 

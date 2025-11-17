@@ -17,6 +17,8 @@ from fastapi import HTTPException, status
 from .analytics import build_similarity_matrix, build_treemap
 from .cache import FileHashCache
 from .config import AppConfig
+from .domain import FolderInfo
+from .fingerprint_store import FingerprintStore
 from .models import (
     DeletionPlan,
     DeletionPlanPayload,
@@ -25,6 +27,7 @@ from .models import (
     ExportFilters,
     ExportHeader,
     FolderLabel,
+    FolderRecord,
     FolderEntry,
     GroupContents,
     GroupDiff,
@@ -54,6 +57,16 @@ from .scanner import (
 )
 from .metrics import MetricsExporter
 from .system import read_resource_sample
+
+
+def _folder_info_to_record(info: FolderInfo) -> FolderRecord:
+    return FolderRecord(
+        path=info.path,
+        relative_path=info.relative_path,
+        total_bytes=info.total_bytes,
+        file_count=info.file_count,
+        unstable=info.unstable,
+    )
 
 
 class ScanJob:
@@ -609,12 +622,13 @@ class ScanManager:
             combined_records: List[Tuple[FolderLabel, GroupRecord]] = []
 
             for group in similarity_groups:
-                group_id, members, pairs, divergences = group_to_record(
+                group_id, members_info, pairs, divergences = group_to_record(
                     group,
                     FolderLabel.NEAR_DUPLICATE if group.max_similarity < 1.0 else FolderLabel.IDENTICAL,
                     result.fingerprints,
                 )
                 label = FolderLabel.NEAR_DUPLICATE if group.max_similarity < 1.0 else FolderLabel.IDENTICAL
+                members = [_folder_info_to_record(member) for member in members_info]
                 record = GroupRecord(
                     group_id=group_id,
                     label=label,
@@ -720,7 +734,7 @@ def _apply_filters(groups: List[GroupRecord], filters: ExportFilters) -> List[Gr
 
     filtered: List[GroupRecord] = []
     for group in groups:
-        canonical = str(group.canonical_path)
+        canonical = group.canonical_path
         if filters.include and not match(canonical, filters.include):
             continue
         if filters.exclude and match(canonical, filters.exclude):
@@ -740,15 +754,13 @@ def _suppress_descendant_groups_all(
     ancestor_sets: List[Set[Path]] = []
 
     for label, record in sorted_records:
-        member_paths = [member.path if isinstance(member.path, Path) else Path(member.path) for member in record.members]
+        member_paths = [Path(member.path) for member in record.members]
         if any(_all_members_descend(member_paths, ancestors) for ancestors in ancestor_sets):
             continue
         kept.append((label, record))
-        ancestor_sets.append(
-            {member.path if isinstance(member.path, Path) else Path(member.path) for member in record.members}
-        )
+        ancestor_sets.append({Path(member.path) for member in record.members})
 
-    kept.sort(key=lambda item: (_record_min_depth(item[1]), str(item[1].canonical_path)))
+    kept.sort(key=lambda item: (_record_min_depth(item[1]), item[1].canonical_path))
     return kept
 
 
