@@ -108,6 +108,7 @@ Runtime defaults align with the PRD: similarity threshold 0.80, `name_size` equa
 - **Backend unit tests**: `make test-backend` (uses pytest fixtures to synthesize nested duplicate trees, including ancestor/descendant layouts).
 - **Run a sample scan**: mount a test directory and call `POST /api/scans` with JSON payload using `curl` or the UI.
 - **Frontend lint**: `npm run build` (build step catches TS errors).
+- **Headless benchmark**: see `docs/benchmark.md` for the automated script that scans `test_mockup/` and reports per-phase timings + RAM usage.
 
 ## Operational Notes
 

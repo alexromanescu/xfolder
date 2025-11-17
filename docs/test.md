@@ -22,6 +22,43 @@ This document tracks the automated and manual checks required to validate the Fo
 | T14 | Group contents endpoint | `/api/scans/{scan_id}/groups/{group_id}/contents` returns canonical + duplicate file lists. | `pytest -q tests/test_group_contents.py::test_group_contents_lists_folder_entries` |
 | T15 | API contracts (matrix/treemap/resources/logs/progress/metrics) | FastAPI regression tests for visualizations, diagnostics APIs, SSE streams, and Prometheus exporter. | `pytest -q tests/test_api_endpoints.py` |
 
+### Scenario Details
+
+1. **Identical Nested `X` Folders**
+   - **Layout**: Root `R` contains siblings `X`, `A/X`, and `B/nested/X`, all sharing an identical payload; `A`/`B` add unique files so the parents stay distinct.
+   - **Expectation**: Only the `X` folders cluster as identical; the root never lands in the same group. Introducing `C/X` with an extra file and raising the similarity threshold should demote it out of the identical cluster.
+   - **Coverage**: `test_nested_x_directories_cluster_without_root`, `test_similarity_threshold_prevents_false_matches`.
+
+2. **Empty Directory Isolation**
+   - **Layout**: Two empty folders and a third tree containing only empty subdirectories.
+   - **Expectation**: No identical or near-duplicate group should form because empty trees contain zero bytes.
+   - **Coverage**: `test_empty_directories_do_not_group`.
+
+3. **Distinct Files With Different Names**
+   - **Layout**: `alpha`, `beta`, and `gamma` each host a single file with varying names and payloads, even when sizes overlap.
+   - **Expectation**: Under both `name_size` and `sha256` equality, the directories remain isolated since hashes and names differ.
+   - **Coverage**: `test_unique_files_remain_isolated`.
+
+4. **Parent Supersedes Children**
+   - **Layout**: `R/X/{A,B}` and `R/Y/{A,B}` share deep children with matching payloads.
+   - **Expectation**: Only parents `X` and `Y` appear in the identical group; descendant folders are suppressed once a parent cluster forms.
+   - **Coverage**: `test_parent_supersedes_children`.
+
+5. **Case Sensitivity Toggle**
+   - **Layout**: `case-root/A/file.txt` vs `case-root/a/file.txt` on a case-sensitive filesystem.
+   - **Expectation**: Default scans keep them separate; toggling `force_case_insensitive` should merge them.
+   - **Coverage**: *Planned*.
+
+6. **Permission & Drift Warnings**
+   - **Layout**: Includes unreadable files plus a directory mutated mid-scan.
+   - **Expectation**: Scanner surfaces `permission` and `unstable` warnings but still completes the job.
+   - **Coverage**: *Planned*.
+
+7. **Deletion Workflow Guardrails**
+   - **Layout**: Sandbox with nested folders plus a deletion plan that mixes valid entries with root-escaping attempts.
+   - **Expectation**: Valid paths move into quarantine; escape attempts are rejected.
+   - **Coverage**: *Planned*.
+
 Run the full suite after changes:
 
 ```bash
