@@ -51,6 +51,11 @@ npm install
 
 Open your browser at `http://localhost:5173`. Enter the path you wish to scan (any directory your user can read) under “Root Path” and launch a scan.
 
+The UI is organized as a compact dashboard:
+- **New Scan** occupies roughly one third of the top row on the left, with all fields stacked vertically for quick configuration.
+- **Active Scans** and key metrics (folders/files scanned, workers, potential reclaim) share the right-hand side; the active scan list scrolls inside its panel so it always fits beside the New Scan form.
+- **Similarity Explorer** (further down) shows a 1/3–2/3 split: similarity groups in a list or tree on the left, and Folder Comparison on the right. A draggable splitter lets you temporarily give more room to either side without breaking the layout.
+
 > **Tip:** To test an SMB/NFS share, mount it on the host first (e.g., `/mnt/share`) and scan that mount point.
 
 ### 1.6. Shutting Down

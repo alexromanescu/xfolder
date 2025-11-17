@@ -1,4 +1,4 @@
-# Project Summary (Mid-November 2025)
+# Project Summary (Late November 2025)
 
 This file captures the high-level state after the recent enhancements so we can restart with minimal context.
 
@@ -16,12 +16,13 @@ This file captures the high-level state after the recent enhancements so we can 
 - **Visual Insights & Comparison**
   - Similarity Matrix view backed by `GET /api/scans/{scan_id}/matrix`, showing top-K adjacency pairs with a heatmap-like list.
   - Duplicate-density Treemap backed by `GET /api/scans/{scan_id}/density/treemap`, summarizing duplicate bytes per folder hierarchy.
-  - Folder Comparison panel renders canonical + duplicates side-by-side, with a file-explorer-style list for each member and color-coded highlights for unique and mismatched entries; includes a toggle to hide/show matching files.
+  - Folder Comparison panel renders canonical + duplicates side-by-side, with a file-explorer-style list for each member and color-coded highlights for unique and mismatched entries; includes a toggle to hide/show matching files. The comparison view now uses a single shared scrollbar and resizable, window-aware columns so large folders remain easy to scan.
 - **Memory Instrumentation + Lightweight Models**
   - Scanner, grouping, and analytics now operate on lightweight dataclasses (`FolderInfo`, `GroupInfo`) rather than pydantic models, dramatically reducing transient allocations; pydantic objects are only materialized at the REST boundary.
   - Fingerprints are persisted to a shelve-backed store once grouping completes so scans no longer keep entire fingerprint maps in RAM.
   - Grouping no longer maintains an O(N²) visited-pairs set and uses a streaming weighted Jaccard calculation, cutting peak RSS on `test_mockup` from ~1.7 GiB down to ~54 MiB and reducing grouping time from ~23 s to ~7 s in the default benchmark run.
   - The benchmark harness gained phase heap snapshots, RSS timelines, smaps/object-census logging, and per-run JSON archives under `docs/benchmark-history/`.
+  - The group diff pipeline was hardened so the `/api/scans/{scan_id}/groups/{group_id}/diff` endpoint now converts lightweight `FolderInfo` dataclasses back into Pydantic `FolderRecord` models at the boundary, eliminating 500s from validation errors and ensuring diffs always render in the UI.
 - **Diagnostics & Observability**
   - SSE log streaming via `GET /api/system/logs/stream`, wired into a Diagnostics drawer in the UI.
   - Resource snapshot endpoint `GET /api/system/resources` surfaces CPU cores/load, process RSS, and best-effort I/O bytes; diagnostics drawer polls this and shows a live resource strip.
@@ -30,6 +31,17 @@ This file captures the high-level state after the recent enhancements so we can 
   - `/api/scans/events` streams scan progress over SSE so the UI updates instantly without the 4s poll loop; the React app auto-reconnects and falls back gracefully.
   - `/api/scans/{scan_id}/metrics` now exposes per-phase durations, bytes scanned, worker allocation, and resource samples captured during each phase.
   - Optional `/metrics` endpoint (gated by `XFS_METRICS_ENABLED=1`) serves Prometheus-compatible gauges for phase durations, bytes scanned, total scans, and active scan counts.
+
+- **Similarity Explorer UI Revamp**
+  - The Similarity Explorer now uses a 1/3–2/3 split: a compact list/tree of groups on the left and a window-aware Folder Comparison on the right, with a draggable splitter for power users.
+  - Group rows were flattened into a denser, “explorer-like” table: the Status column stacks label, similarity, reclaimable bytes, and stability; Folder shows the canonical path and counts; Members contains the selectable duplicates and Compare actions.
+  - Column widths were relaxed and rely on the container width instead of fixed pixel widths, eliminating the horizontal “jump” when toggling between 2- and 3-way comparisons.
+  - Folder Comparison cards resize with the viewport, with a single vertical scrollbar for the entire comparison and truncated paths to keep the layout stable even for deep trees.
+
+- **Top-Level Dashboard Layout**
+  - The “New Scan” panel now uses a single vertical field stack, making the scan form easier to skim and tweak.
+  - “Active Scans” and the metrics cards were moved into a shared right-hand panel, opposite New Scan, so you always see the launch controls and current scan list side by side.
+  - The active scans table scrolls within a fixed-height panel that matches the New Scan height, and the summary metric cards sit directly beneath it, giving the whole top section a compact, consistent dashboard feel.
 
 ## Key Tests / Validation
 

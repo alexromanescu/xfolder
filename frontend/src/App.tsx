@@ -351,7 +351,7 @@ export default function App() {
       }
       const rect = container.getBoundingClientRect();
       const startX = event.clientX;
-      const startWidth = groupsPaneWidth ?? rect.width * 0.45;
+      const startWidth = groupsPaneWidth ?? rect.width / 3;
 
       const onMove = (moveEvent: MouseEvent) => {
         const delta = moveEvent.clientX - startX;
@@ -675,7 +675,7 @@ export default function App() {
               <div
                 className="groups-panel"
                 style={{
-                  flex: `0 0 ${groupsPaneWidth ?? 360}px`,
+                  flex: groupsPaneWidth != null ? `0 0 ${groupsPaneWidth}px` : "0 0 33.333%",
                 }}
               >
                 <div className="tab-strip">

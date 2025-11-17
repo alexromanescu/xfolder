@@ -46,7 +46,7 @@ export function ScanForm({ onSubmit, busy }: ScanFormProps) {
           {busy ? "Scanning…" : "Launch Scan"}
         </button>
       </div>
-      <div className="input-row">
+      <div className="scan-form-fields">
         <div className="input-group">
           <label htmlFor="root_path">Root Path</label>
           <input
@@ -95,8 +95,6 @@ export function ScanForm({ onSubmit, busy }: ScanFormProps) {
             <option value="bag_of_files">Bag of Files</option>
           </select>
         </div>
-      </div>
-      <div className="input-row">
         <div className="input-group">
           <label htmlFor="concurrency">Concurrency Cap</label>
           <input

@@ -218,3 +218,28 @@ Non-goals: cross-machine synchronization, deduplicating storage at the filesyste
 
 ## 13. REST API (Application Programming Interface)
 (omitted for brevity - included in final output)
+
+---
+
+## 14. What's New (Late November 2025)
+
+- **Grouping Performance & Memory**
+  - The weighted Jaccard implementation now computes similarity in a streaming fashion, iterating over the smaller fingerprint first and avoiding large helper sets for key unions.
+  - The similarity grouping phase no longer maintains a global `visited_pairs` set; per-bucket iteration is sufficient to avoid duplicates. This substantially reduces peak RAM and cuts grouping time on the bundled `test_mockup` dataset from ~23 seconds to ~7 seconds while keeping results consistent.
+
+- **Diff Endpoint Robustness**
+  - The scanner uses lightweight dataclasses (`FolderInfo`, `GroupInfo`) internally, but the diff endpoint now adapts these back into Pydantic `FolderRecord` instances before constructing `GroupDiff`.
+  - This resolves previous Pydantic validation failures that surfaced as HTTP 500s on `GET /api/scans/{scan_id}/groups/{group_id}/diff` and makes Folder Comparison more reliable.
+
+- **Similarity Explorer Layout**
+  - The main Similarity Explorer view uses a 1/3–2/3 split: similarity groups (list or tree) on the left, Folder Comparison on the right, with a draggable splitter so operators can temporarily favor either side.
+  - Group rows are denser: the Status column stacks label, similarity, reclaimable bytes, and stability; the Folder column truncates long paths with ellipsis; Members holds duplicate entries and Compare actions.
+  - Column widths are driven by the container instead of fixed pixel widths, eliminating visible horizontal “jumping” when toggling between 2-way and 3-way comparisons.
+
+- **Folder Comparison Behavior**
+  - Comparison cards flex to share available width; long paths truncate rather than stretching cards beyond the viewport.
+  - Vertical scrolling happens at the comparison-pane level so canonical and duplicate lists scroll together, keeping differences aligned; card borders always enclose the list content, even for large folders.
+
+- **Top-Level Dashboard Layout**
+  - The New Scan form is a vertical field stack anchored on the left of the top row.
+  - Active Scans and headline metrics share a right-hand panel, aligned in height with New Scan. The active scan table scrolls within this panel and the metric cards sit directly beneath it, giving the top of the app a consistent, dashboard-style layout.

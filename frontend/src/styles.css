@@ -563,6 +563,12 @@ select:focus {
   white-space: nowrap;
 }
 
+.scan-form-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .groups-comparison-layout {
   display: flex;
   align-items: stretch;
@@ -691,9 +697,8 @@ select:focus {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  flex: 0 0 260px;
-  width: 260px;
-  max-width: 260px;
+  flex: 1 1 0;
+  min-width: 220px;
   min-height: 0;
 }
 
@@ -774,8 +779,6 @@ select:focus {
   flex-direction: column;
   gap: 4px;
   font-size: 12px;
-  max-height: 260px;
-  overflow-y: auto;
 }
 
 .entry-row {
