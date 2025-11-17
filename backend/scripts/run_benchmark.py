@@ -10,7 +10,8 @@ import tracemalloc
 from datetime import datetime, timezone
 from statistics import fmean
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Callable, Set
+import gc
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -126,12 +127,36 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Capture tracemalloc diffs to highlight top allocations",
     )
+    parser.add_argument(
+        "--phase-heap-snapshots",
+        action="store_true",
+        help="Capture tracemalloc stats once per phase (requires --profile-heap)",
+    )
+    parser.add_argument(
+        "--object-census-interval",
+        type=float,
+        default=0.0,
+        help="Collect GC object counts every N seconds (0 disables)",
+    )
+    parser.add_argument(
+        "--smaps-interval",
+        type=float,
+        default=0.0,
+        help="Record /proc/self/smaps_rollup every N seconds (0 disables)",
+    )
     return parser.parse_args()
 
 
-def wait_for_completion(manager: ScanManager, job: ScanJob, poll_interval: float) -> ScanJob:
+def wait_for_completion(
+    manager: ScanManager,
+    job: ScanJob,
+    poll_interval: float,
+    progress_callback: Optional[Callable[[ScanProgress], None]] = None,
+) -> ScanJob:
     while True:
         progress = manager.get_progress(job.scan_id)
+        if progress_callback:
+            progress_callback(progress)
         if progress.status == ScanStatus.COMPLETED:
             return manager.get_job(job.scan_id)
         if progress.status == ScanStatus.FAILED:
@@ -178,6 +203,108 @@ class ExtraResourceSampler:
         return self._records
 
 
+class ObjectCensusSampler:
+    def __init__(self, interval: float) -> None:
+        self.interval = interval
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+        self._records: List[Dict[str, Any]] = []
+
+    def start(self) -> None:
+        if self.interval <= 0:
+            return
+
+        def _loop():
+            from app.models import FolderRecord, GroupRecord, DirectoryFingerprint  # noqa: E402
+
+            while not self._stop.is_set():
+                gc.collect()
+                counts = {
+                    "FolderRecord": 0,
+                    "GroupRecord": 0,
+                    "DirectoryFingerprint": 0,
+                    "Path": 0,
+                }
+                for obj in gc.get_objects():
+                    try:
+                        if isinstance(obj, FolderRecord):
+                            counts["FolderRecord"] += 1
+                        elif isinstance(obj, GroupRecord):
+                            counts["GroupRecord"] += 1
+                        elif isinstance(obj, DirectoryFingerprint):
+                            counts["DirectoryFingerprint"] += 1
+                        elif isinstance(obj, Path):
+                            counts["Path"] += 1
+                    except ReferenceError:
+                        continue
+                self._records.append(
+                    {
+                        "timestamp": datetime.now(timezone.utc),
+                        "counts": counts,
+                    }
+                )
+                self._stop.wait(self.interval)
+
+        self._thread = threading.Thread(target=_loop, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        if not self._thread:
+            return
+        self._stop.set()
+        self._thread.join()
+
+    def samples(self) -> List[Dict[str, Any]]:
+        return self._records
+
+
+class SmapsSampler:
+    def __init__(self, interval: float) -> None:
+        self.interval = interval
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+        self._records: List[Dict[str, Any]] = []
+
+    def start(self) -> None:
+        if self.interval <= 0:
+            return
+
+        def _loop():
+            while not self._stop.is_set():
+                stats = self._read()
+                stats["timestamp"] = datetime.now(timezone.utc)
+                self._records.append(stats)
+                self._stop.wait(self.interval)
+
+        self._thread = threading.Thread(target=_loop, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        if not self._thread:
+            return
+        self._stop.set()
+        self._thread.join()
+
+    def samples(self) -> List[Dict[str, Any]]:
+        return self._records
+
+    @staticmethod
+    def _read() -> Dict[str, Any]:
+        stats: Dict[str, Any] = {}
+        try:
+            with open("/proc/self/smaps_rollup", "r", encoding="utf-8") as fh:
+                for line in fh:
+                    if ":" not in line:
+                        continue
+                    key, value = line.split(":", 1)
+                    parts = value.strip().split()
+                    if len(parts) >= 1 and parts[0].isdigit():
+                        stats[key.strip().lower()] = int(parts[0])
+        except OSError:
+            stats["error"] = "unavailable"
+        return stats
+
+
 def _phase_for_timestamp(job: ScanJob, timestamp) -> Optional[str]:
     for name in job.phase_sequence:
         timing = job.phase_timings.get(name)
@@ -205,6 +332,29 @@ def collect_structure_metrics(job: ScanJob) -> Dict[str, Any]:
         fingerprint_count = len(job.result.fingerprints)
     metrics["fingerprint_count"] = fingerprint_count
     return metrics
+
+
+class PhaseHeapProfiler:
+    def __init__(self, enabled: bool, base_snapshot) -> None:
+        self.enabled = enabled and base_snapshot is not None
+        self.base_snapshot = base_snapshot
+        self.records: Dict[str, List[Dict[str, Any]]] = {}
+        self._seen: Set[str] = set()
+
+    def capture(self, phase: str) -> None:
+        if not self.enabled or not phase or phase in self._seen:
+            return
+        snapshot = tracemalloc.take_snapshot()
+        stats = snapshot.compare_to(self.base_snapshot, "lineno")[:10]
+        self.records[phase] = [
+            {
+                "location": f"{stat.traceback[0].filename}:{stat.traceback[0].lineno}",
+                "size_bytes": stat.size,
+                "count": stat.count,
+            }
+            for stat in stats
+        ]
+        self._seen.add(phase)
 
 
 def summarize(job: ScanJob) -> Dict[str, Any]:
@@ -349,12 +499,38 @@ def print_summary(summary: Dict[str, Any]) -> None:
             offset_text = f"{offset:.2f}s" if isinstance(offset, (int, float)) else "n/a"
             phase_name = entry.get("phase") or "unknown"
             print(f"  - +{offset_text} [{phase_name}] {rss:.2f} MiB (load {entry.get('load_1m', 0):.2f})")
+    census = summary.get("object_census") or []
+    if census:
+        print("Object census timeline:")
+        for entry in census:
+            offset = entry.get("seconds_since_start")
+            offset_text = f"{offset:.2f}s" if isinstance(offset, (int, float)) else "n/a"
+            counts = entry.get("counts", {})
+            print(f"  - +{offset_text} FolderRecord={counts.get('FolderRecord',0)} GroupRecord={counts.get('GroupRecord',0)} DirectoryFingerprint={counts.get('DirectoryFingerprint',0)} Path={counts.get('Path',0)}")
+    smaps = summary.get("smaps_samples") or []
+    if smaps:
+        print("smaps_rollup samples:")
+        for entry in smaps:
+            offset = entry.get("seconds_since_start")
+            offset_text = f"{offset:.2f}s" if isinstance(offset, (int, float)) else "n/a"
+            rss_kb = entry.get("rss")
+            rss_mb = (rss_kb / 1024) if isinstance(rss_kb, (int, float)) else None
+            rss_text = f"{rss_mb:.2f} MiB" if rss_mb is not None else "n/a"
+            print(f"  - +{offset_text} RSS={rss_text} entries={len(entry.keys())}")
     heap_entries = summary.get("heap_profile") or []
     if heap_entries:
         print("Heap profile (top allocations):")
         for stat in heap_entries:
             size_mb = stat["size_bytes"] / (1024 ** 2)
             print(f"  - {stat['location']}: {size_mb:.2f} MiB across {stat['count']} allocations")
+    phase_heaps = summary.get("phase_heap_profile") or {}
+    if phase_heaps:
+        print("Per-phase heap snapshots:")
+        for phase, stats in phase_heaps.items():
+            print(f"  Phase {phase}:")
+            for stat in stats:
+                size_mb = stat["size_bytes"] / (1024 ** 2)
+                print(f"    - {stat['location']}: {size_mb:.2f} MiB ({stat['count']} allocs)")
 
 
 def main() -> None:
@@ -390,19 +566,39 @@ def main() -> None:
 
     manager = ScanManager(app_config, executor_workers=args.workers)
     tracer_base = None
-    if args.profile_heap:
+    if args.profile_heap or args.phase_heap_snapshots:
         tracemalloc.start()
         tracer_base = tracemalloc.take_snapshot()
+    phase_profiler = PhaseHeapProfiler(args.phase_heap_snapshots, tracer_base)
     extra_sampler = ExtraResourceSampler(args.extra_sample_interval)
     extra_sampler.start()
+    object_sampler = ObjectCensusSampler(args.object_census_interval)
+    object_sampler.start()
+    smaps_sampler = SmapsSampler(args.smaps_interval)
+    smaps_sampler.start()
     try:
         job = manager.start_scan(request)
-        final_job = wait_for_completion(manager, job, args.poll_interval)
+        last_phase: Optional[str] = None
+
+        def progress_hook(progress):
+            nonlocal last_phase
+            if progress.phase and progress.phase != last_phase:
+                phase_profiler.capture(progress.phase)
+                last_phase = progress.phase
+
+        final_job = wait_for_completion(
+            manager,
+            job,
+            args.poll_interval,
+            progress_callback=progress_hook if (args.phase_heap_snapshots and tracer_base) else None,
+        )
     finally:
         extra_sampler.stop()
+        object_sampler.stop()
+        smaps_sampler.stop()
         manager.shutdown()
     heap_snapshot = None
-    if args.profile_heap:
+    if args.profile_heap or args.phase_heap_snapshots:
         heap_snapshot = tracemalloc.take_snapshot()
         tracemalloc.stop()
 
@@ -411,6 +607,8 @@ def main() -> None:
 
     summary = summarize(final_job)
     summary["structure_metrics"] = collect_structure_metrics(final_job)
+    if phase_profiler.records:
+        summary["phase_heap_profile"] = phase_profiler.records
     extra_records = []
     for entry in extra_sampler.samples():
         timestamp = entry["timestamp"]
@@ -433,6 +631,27 @@ def main() -> None:
             }
         )
     summary["extra_resource_samples"] = extra_records
+    census_records = []
+    for entry in object_sampler.samples():
+        timestamp = entry["timestamp"]
+        offset = (timestamp - final_job.started_at).total_seconds() if final_job.started_at else None
+        census_records.append(
+            {
+                "timestamp": timestamp.isoformat(),
+                "seconds_since_start": offset,
+                "counts": entry["counts"],
+            }
+        )
+    summary["object_census"] = census_records
+    smaps_records = []
+    for entry in smaps_sampler.samples():
+        timestamp = entry.get("timestamp")
+        offset = (timestamp - final_job.started_at).total_seconds() if final_job.started_at and timestamp else None
+        record = {k: v for k, v in entry.items() if k != "timestamp"}
+        record["timestamp"] = timestamp.isoformat() if timestamp else None
+        record["seconds_since_start"] = offset
+        smaps_records.append(record)
+    summary["smaps_samples"] = smaps_records
     if args.profile_heap and heap_snapshot and tracer_base:
         stats = heap_snapshot.compare_to(tracer_base, "lineno")[:10]
         summary["heap_profile"] = [
