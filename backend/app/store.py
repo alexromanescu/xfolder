@@ -627,7 +627,12 @@ class ScanManager:
             for label, record in filtered_records:
                 job.groups[label].append(record)
 
-            job.matrix_entries = build_similarity_matrix(filtered_records)
+            job.matrix_entries = build_similarity_matrix(
+                filtered_records,
+                max_entries=self.config.matrix_max_entries,
+                min_reclaim_bytes=self.config.matrix_min_reclaim_bytes,
+                include_identical=self.config.matrix_include_identical,
+            )
             root_label = job.request.root_path.name or job.request.root_path.as_posix()
             root_fingerprint = result.fingerprints.get(".")
             root_bytes = root_fingerprint.folder.total_bytes if root_fingerprint else 0

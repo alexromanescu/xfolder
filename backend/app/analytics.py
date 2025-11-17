@@ -1,19 +1,36 @@
 from __future__ import annotations
 
+import os
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, Iterable, List, Tuple, Optional
+import heapq
 
 from .models import FolderLabel, GroupRecord, SimilarityMatrixEntry, TreemapNode
 
 
-def build_similarity_matrix(records: Iterable[Tuple[FolderLabel, GroupRecord]]) -> List[SimilarityMatrixEntry]:
+def build_similarity_matrix(
+    records: Iterable[Tuple[FolderLabel, GroupRecord]],
+    *,
+    max_entries: Optional[int] = None,
+    min_reclaim_bytes: int = 0,
+    include_identical: bool = True,
+) -> List[SimilarityMatrixEntry]:
     """Flatten similarity groups into adjacency entries sorted by similarity."""
-    entries: List[SimilarityMatrixEntry] = []
-    for label, record in records:
+    record_list = list(records)
+    if not record_list:
+        return []
+
+    worker_cap = min(32, (os.cpu_count() or 4) * 2)
+    worker_count = min(worker_cap, len(record_list))
+
+    def _process(item: Tuple[FolderLabel, GroupRecord]) -> List[SimilarityMatrixEntry]:
+        label, record = item
         members = record.members
         if len(members) < 2 or not record.pairwise_similarity:
-            continue
+            return []
+        chunk: List[SimilarityMatrixEntry] = []
         for pair in record.pairwise_similarity:
             if pair.a >= len(members) or pair.b >= len(members):
                 continue
@@ -23,7 +40,7 @@ def build_similarity_matrix(records: Iterable[Tuple[FolderLabel, GroupRecord]]) 
             reclaimable = min(left.total_bytes, right.total_bytes)
             if label == FolderLabel.NEAR_DUPLICATE:
                 reclaimable = int(reclaimable * pair.similarity)
-            entries.append(
+            chunk.append(
                 SimilarityMatrixEntry(
                     group_id=record.group_id,
                     label=label,
@@ -34,6 +51,39 @@ def build_similarity_matrix(records: Iterable[Tuple[FolderLabel, GroupRecord]]) 
                     reclaimable_bytes=reclaimable,
                 )
             )
+        return chunk
+
+    heap: List[Tuple[Tuple[float, int], SimilarityMatrixEntry]] = []
+
+    def _maybe_add(entry: SimilarityMatrixEntry) -> None:
+        if not include_identical and entry.label == FolderLabel.IDENTICAL:
+            return
+        if entry.reclaimable_bytes < min_reclaim_bytes:
+            return
+        if max_entries and max_entries > 0:
+            key = (entry.similarity, entry.combined_bytes)
+            if len(heap) < max_entries:
+                heapq.heappush(heap, (key, entry))
+            else:
+                if key > heap[0][0]:
+                    heapq.heapreplace(heap, (key, entry))
+        else:
+            heap.append(((entry.similarity, entry.combined_bytes), entry))
+
+    def _consume(items: Iterable[Tuple[FolderLabel, GroupRecord]]) -> None:
+        if worker_count <= 1:
+            for item in items:
+                for entry in _process(item):
+                    _maybe_add(entry)
+        else:
+            with ThreadPoolExecutor(max_workers=worker_count) as executor:
+                for chunk in executor.map(_process, items):
+                    for entry in chunk:
+                        _maybe_add(entry)
+
+    _consume(record_list)
+
+    entries = [entry for _key, entry in heap]
     entries.sort(key=lambda item: (item.similarity, item.combined_bytes), reverse=True)
     return entries
 

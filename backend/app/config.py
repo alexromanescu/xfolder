@@ -52,6 +52,9 @@ class AppConfig(BaseModel):
     log_level: str = Field(default="INFO")
     log_stream_enabled: bool = Field(default=False)
     metrics_enabled: bool = Field(default=False)
+    matrix_max_entries: int = Field(default=1000, ge=0)
+    matrix_min_reclaim_bytes: int = Field(default=0, ge=0)
+    matrix_include_identical: bool = Field(default=False)
 
     @classmethod
     def from_env(cls) -> "AppConfig":
@@ -60,6 +63,9 @@ class AppConfig(BaseModel):
         log_level = os.getenv("XFS_LOG_LEVEL", "INFO").upper()
         log_stream = os.getenv("XFS_LOG_STREAM_ENABLED", "0") in {"1", "true", "TRUE"}
         metrics_enabled = os.getenv("XFS_METRICS_ENABLED", "0") in {"1", "true", "TRUE"}
+        matrix_max = int(os.getenv("XFS_MATRIX_MAX_ENTRIES", "1000"))
+        matrix_min_reclaim = int(os.getenv("XFS_MATRIX_MIN_RECLAIM_BYTES", "0"))
+        matrix_include_identical = os.getenv("XFS_MATRIX_INCLUDE_IDENTICAL", "0") in {"1", "true", "TRUE"}
         return cls(
             listen_host=os.getenv("XFS_LISTEN_HOST", "0.0.0.0"),
             listen_port=int(os.getenv("XFS_LISTEN_PORT", "8080")),
@@ -68,4 +74,7 @@ class AppConfig(BaseModel):
             log_level=log_level,
             log_stream_enabled=log_stream,
             metrics_enabled=metrics_enabled,
+            matrix_max_entries=matrix_max,
+            matrix_min_reclaim_bytes=matrix_min_reclaim,
+            matrix_include_identical=matrix_include_identical,
         )
