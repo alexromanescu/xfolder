@@ -4,10 +4,13 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import threading
 import time
+import tracemalloc
+from datetime import datetime, timezone
 from statistics import fmean
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +27,7 @@ from app.models import (  # noqa: E402
     StructurePolicy,
 )
 from app.store import ScanJob, ScanManager  # noqa: E402
+from app.system import read_resource_stats  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -90,6 +94,38 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Emit the summary as formatted JSON in addition to the text table",
     )
+    parser.add_argument(
+        "--include-matrix",
+        action="store_true",
+        help="Generate the similarity matrix during the benchmark",
+    )
+    parser.add_argument(
+        "--include-treemap",
+        action="store_true",
+        help="Generate the duplicate-density treemap during the benchmark",
+    )
+    parser.add_argument(
+        "--log-dir",
+        type=Path,
+        default=REPO_ROOT / "docs" / "benchmark-history",
+        help="Directory where JSON summaries are stored per run (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--no-log",
+        action="store_true",
+        help="Skip writing JSON summaries to disk",
+    )
+    parser.add_argument(
+        "--extra-sample-interval",
+        type=float,
+        default=0.0,
+        help="Add an extra resource sampler that polls every N seconds (0 disables)",
+    )
+    parser.add_argument(
+        "--profile-heap",
+        action="store_true",
+        help="Capture tracemalloc diffs to highlight top allocations",
+    )
     return parser.parse_args()
 
 
@@ -101,6 +137,74 @@ def wait_for_completion(manager: ScanManager, job: ScanJob, poll_interval: float
         if progress.status == ScanStatus.FAILED:
             raise RuntimeError(f"Scan {job.scan_id} failed: {job.error}")
         time.sleep(poll_interval)
+
+
+class ExtraResourceSampler:
+    def __init__(self, interval: float) -> None:
+        self.interval = interval
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+        self._records: List[Dict[str, Any]] = []
+
+    def start(self) -> None:
+        if self.interval <= 0:
+            return
+
+        def _loop():
+            while not self._stop.is_set():
+                stats = read_resource_stats()
+                self._records.append(
+                    {
+                        "timestamp": datetime.now(timezone.utc),
+                        "rss_bytes": stats.process_rss_bytes,
+                        "cpu_cores": stats.cpu_cores,
+                        "load_1m": stats.load_1m,
+                        "read_bytes": stats.process_read_bytes,
+                        "write_bytes": stats.process_write_bytes,
+                    }
+                )
+                self._stop.wait(self.interval)
+
+        self._thread = threading.Thread(target=_loop, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        if not self._thread:
+            return
+        self._stop.set()
+        self._thread.join()
+
+    def samples(self) -> List[Dict[str, Any]]:
+        return self._records
+
+
+def _phase_for_timestamp(job: ScanJob, timestamp) -> Optional[str]:
+    for name in job.phase_sequence:
+        timing = job.phase_timings.get(name)
+        if not timing:
+            continue
+        start = timing.started_at
+        end = timing.completed_at or timestamp
+        if start <= timestamp <= end:
+            return name
+    return None
+
+
+def collect_structure_metrics(job: ScanJob) -> Dict[str, Any]:
+    metrics: Dict[str, Any] = {}
+    all_records: List[Any] = []
+    for records in job.groups.values():
+        all_records.extend(records)
+    metrics["group_records"] = len(all_records)
+    metrics["group_members_total"] = sum(len(record.members) for record in all_records)
+    metrics["group_pairwise_entries"] = sum(len(record.pairwise_similarity) for record in all_records)
+    metrics["group_divergence_entries"] = sum(len(record.divergences) for record in all_records)
+    metrics["matrix_entries"] = len(job.matrix_entries)
+    fingerprint_count = 0
+    if job.result and getattr(job.result, "fingerprints", None):
+        fingerprint_count = len(job.result.fingerprints)
+    metrics["fingerprint_count"] = fingerprint_count
+    return metrics
 
 
 def summarize(job: ScanJob) -> Dict[str, Any]:
@@ -133,6 +237,32 @@ def summarize(job: ScanJob) -> Dict[str, Any]:
     peak_rss = max(rss_samples) if rss_samples else None
     avg_rss = fmean(rss_samples) if rss_samples else None
 
+    samples_detail: List[Dict[str, Any]] = []
+    phase_peaks: Dict[str, Dict[str, Any]] = {}
+    for sample in job.resource_samples:
+        if sample.process_rss_bytes is None:
+            continue
+        offset = None
+        if job.started_at:
+            offset = (sample.timestamp - job.started_at).total_seconds()
+        phase_name = _phase_for_timestamp(job, sample.timestamp)
+        entry = {
+            "timestamp": sample.timestamp.isoformat(),
+            "seconds_since_start": offset,
+            "phase": phase_name,
+            "rss_bytes": sample.process_rss_bytes,
+            "rss_mebibytes": sample.process_rss_bytes / (1024 ** 2),
+            "cpu_cores": sample.cpu_cores,
+            "load_1m": sample.load_1m,
+            "read_bytes": sample.process_read_bytes,
+            "write_bytes": sample.process_write_bytes,
+        }
+        samples_detail.append(entry)
+        if phase_name:
+            prev = phase_peaks.get(phase_name)
+            if not prev or entry["rss_bytes"] > prev["rss_bytes"]:
+                phase_peaks[phase_name] = entry
+
     return {
         "scan_id": job.scan_id,
         "root_path": str(job.request.root_path),
@@ -145,7 +275,18 @@ def summarize(job: ScanJob) -> Dict[str, Any]:
         "peak_rss_bytes": peak_rss,
         "peak_rss_mebibytes": peak_rss / (1024 ** 2) if peak_rss else None,
         "average_rss_bytes": avg_rss,
+        "resource_samples_detail": samples_detail,
+        "phase_memory_peaks": phase_peaks,
     }
+
+
+def save_summary(summary: Dict[str, Any], job: ScanJob, directory: Path) -> Path:
+    directory.mkdir(parents=True, exist_ok=True)
+    started_at = job.started_at.isoformat().replace(":", "").replace("-", "").replace("+", "").replace(".", "")
+    filename = f"{job.scan_id}_{started_at}.json"
+    path = directory / filename
+    path.write_text(json.dumps(summary, indent=2))
+    return path
 
 
 def print_summary(summary: Dict[str, Any]) -> None:
@@ -167,12 +308,53 @@ def print_summary(summary: Dict[str, Any]) -> None:
         duration = phase["duration_seconds"]
         duration_text = f"{duration:.2f}s" if duration is not None else "n/a"
         print(f"  - {phase['phase']}: {duration_text}")
+    structure = summary.get("structure_metrics") or {}
+    if structure:
+        print("Structure metrics:")
+        for key, value in structure.items():
+            print(f"  - {key}: {value}")
     peak = summary.get("peak_rss_mebibytes")
     if peak is not None:
         print(f"Peak RSS: {peak:.2f} MiB")
     avg = summary.get("average_rss_bytes")
     if avg is not None:
         print(f"Average RSS: {avg / (1024 ** 2):.2f} MiB")
+    peaks = summary.get("phase_memory_peaks") or {}
+    if peaks:
+        print("Phase memory peaks:")
+        for phase, entry in peaks.items():
+            rss = entry["rss_mebibytes"]
+            offset = entry.get("seconds_since_start")
+            if rss is None:
+                continue
+            offset_text = f"{offset:.2f}s" if isinstance(offset, (int, float)) else "n/a"
+            print(f"  - {phase}: {rss:.2f} MiB at +{offset_text}")
+    samples = summary.get("resource_samples_detail") or []
+    if samples:
+        print("Resource samples timeline:")
+        for entry in samples:
+            rss = entry["rss_mebibytes"]
+            offset = entry.get("seconds_since_start")
+            offset_text = f"{offset:.2f}s" if isinstance(offset, (int, float)) else "n/a"
+            phase_name = entry.get("phase") or "unknown"
+            print(f"  - +{offset_text} [{phase_name}] {rss:.2f} MiB (load {entry['load_1m']:.2f})")
+    extra_samples = summary.get("extra_resource_samples") or []
+    if extra_samples:
+        print("High-frequency samples:")
+        for entry in extra_samples:
+            rss = entry.get("rss_mebibytes")
+            if rss is None:
+                continue
+            offset = entry.get("seconds_since_start")
+            offset_text = f"{offset:.2f}s" if isinstance(offset, (int, float)) else "n/a"
+            phase_name = entry.get("phase") or "unknown"
+            print(f"  - +{offset_text} [{phase_name}] {rss:.2f} MiB (load {entry.get('load_1m', 0):.2f})")
+    heap_entries = summary.get("heap_profile") or []
+    if heap_entries:
+        print("Heap profile (top allocations):")
+        for stat in heap_entries:
+            size_mb = stat["size_bytes"] / (1024 ** 2)
+            print(f"  - {stat['location']}: {size_mb:.2f} MiB across {stat['count']} allocations")
 
 
 def main() -> None:
@@ -202,22 +384,72 @@ def main() -> None:
         force_case_insensitive=args.force_case_insensitive,
         concurrency=args.concurrency,
         deletion_enabled=False,
+        include_matrix=args.include_matrix,
+        include_treemap=args.include_treemap,
     )
 
     manager = ScanManager(app_config, executor_workers=args.workers)
+    tracer_base = None
+    if args.profile_heap:
+        tracemalloc.start()
+        tracer_base = tracemalloc.take_snapshot()
+    extra_sampler = ExtraResourceSampler(args.extra_sample_interval)
+    extra_sampler.start()
     try:
         job = manager.start_scan(request)
         final_job = wait_for_completion(manager, job, args.poll_interval)
     finally:
+        extra_sampler.stop()
         manager.shutdown()
+    heap_snapshot = None
+    if args.profile_heap:
+        heap_snapshot = tracemalloc.take_snapshot()
+        tracemalloc.stop()
 
     if final_job.status != ScanStatus.COMPLETED:
         raise SystemExit(f"Scan {final_job.scan_id} did not complete successfully.")
 
     summary = summarize(final_job)
+    summary["structure_metrics"] = collect_structure_metrics(final_job)
+    extra_records = []
+    for entry in extra_sampler.samples():
+        timestamp = entry["timestamp"]
+        offset = None
+        if final_job.started_at:
+            offset = (timestamp - final_job.started_at).total_seconds()
+        phase_name = _phase_for_timestamp(final_job, timestamp)
+        rss = entry["rss_bytes"]
+        extra_records.append(
+            {
+                "timestamp": timestamp.isoformat(),
+                "seconds_since_start": offset,
+                "phase": phase_name,
+                "rss_bytes": rss,
+                "rss_mebibytes": rss / (1024 ** 2) if rss is not None else None,
+                "cpu_cores": entry["cpu_cores"],
+                "load_1m": entry["load_1m"],
+                "read_bytes": entry["read_bytes"],
+                "write_bytes": entry["write_bytes"],
+            }
+        )
+    summary["extra_resource_samples"] = extra_records
+    if args.profile_heap and heap_snapshot and tracer_base:
+        stats = heap_snapshot.compare_to(tracer_base, "lineno")[:10]
+        summary["heap_profile"] = [
+            {
+                "location": f"{stat.traceback[0].filename}:{stat.traceback[0].lineno}",
+                "size_bytes": stat.size,
+                "count": stat.count,
+            }
+            for stat in stats
+        ]
+
     print_summary(summary)
     if args.json_output:
         print(json.dumps(summary, indent=2))
+    if not args.no_log:
+        log_path = save_summary(summary, final_job, args.log_dir)
+        print(f"Saved benchmark log to {log_path}")
 
 
 if __name__ == "__main__":

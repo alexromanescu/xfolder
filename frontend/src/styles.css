@@ -273,6 +273,23 @@ button {
   letter-spacing: 0.05em;
 }
 
+.checkbox-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.checkbox-stack label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text-100);
+}
+
 input,
 select {
   width: 100%;
@@ -290,6 +307,12 @@ select:focus {
   outline: none;
   border-color: rgba(56, 189, 248, 0.7);
   background: rgba(15, 23, 42, 0.9);
+}
+
+.checkbox-stack input[type="checkbox"] {
+  width: auto;
+  padding: 0;
+  accent-color: var(--primary);
 }
 
 .button {

@@ -69,7 +69,7 @@ services:
 
 ## Using the UI
 
-1. Launch a scan: choose the root path (`/data` by default), pick equality mode (`name_size` or `sha256`), adjust similarity threshold, and decide if deletion is enabled.
+1. Launch a scan: choose the root path (`/data` by default), pick equality mode (`name_size` or `sha256`), adjust similarity threshold, decide if deletion is enabled, and optionally toggle the similarity matrix/treemap checkboxes (both default off to conserve RAM).
 2. Monitor scan progress and warnings in **Active Scans**.
 3. Once completed, browse **Similarity Groups**:
    - **Identical**: perfect clones (1.0 similarity).

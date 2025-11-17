@@ -254,6 +254,8 @@ class ScanManager:
             phase=job.meta.get("phase", ""),
             last_path=job.meta.get("last_path") or None,
             phases=phases,
+            include_matrix=job.request.include_matrix,
+            include_treemap=job.request.include_treemap,
         )
 
     def get_groups(self, scan_id: str, label: Optional[FolderLabel] = None) -> List[GroupRecord]:
@@ -278,6 +280,8 @@ class ScanManager:
         job = self.get_job(scan_id)
         if job.status != ScanStatus.COMPLETED:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Scan is not complete")
+        if not job.request.include_matrix:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Similarity matrix disabled for this scan")
         entries = [entry for entry in job.matrix_entries if entry.similarity >= min_similarity]
         total = len(entries)
         window = entries[offset : offset + limit]
@@ -294,6 +298,8 @@ class ScanManager:
         job = self.get_job(scan_id)
         if job.status != ScanStatus.COMPLETED:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Scan is not complete")
+        if not job.request.include_treemap:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Treemap disabled for this scan")
         if not job.treemap:
             job.treemap = TreemapNode(
                 path=".",
@@ -627,16 +633,23 @@ class ScanManager:
             for label, record in filtered_records:
                 job.groups[label].append(record)
 
-            job.matrix_entries = build_similarity_matrix(
-                filtered_records,
-                max_entries=self.config.matrix_max_entries,
-                min_reclaim_bytes=self.config.matrix_min_reclaim_bytes,
-                include_identical=self.config.matrix_include_identical,
-            )
-            root_label = job.request.root_path.name or job.request.root_path.as_posix()
-            root_fingerprint = result.fingerprints.get(".")
-            root_bytes = root_fingerprint.folder.total_bytes if root_fingerprint else 0
-            job.treemap = build_treemap(filtered_records, root_label=root_label, root_bytes=root_bytes)
+            if job.request.include_matrix:
+                job.matrix_entries = build_similarity_matrix(
+                    filtered_records,
+                    max_entries=self.config.matrix_max_entries,
+                    min_reclaim_bytes=self.config.matrix_min_reclaim_bytes,
+                    include_identical=self.config.matrix_include_identical,
+                )
+            else:
+                job.matrix_entries = []
+
+            if job.request.include_treemap:
+                root_label = job.request.root_path.name or job.request.root_path.as_posix()
+                root_fingerprint = result.fingerprints.get(".")
+                root_bytes = root_fingerprint.folder.total_bytes if root_fingerprint else 0
+                job.treemap = build_treemap(filtered_records, root_label=root_label, root_bytes=root_bytes)
+            else:
+                job.treemap = None
 
             job.result = result
             job.warnings = result.warnings

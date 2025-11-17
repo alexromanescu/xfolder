@@ -13,6 +13,8 @@ const defaultPayload: ScanRequest = {
   structure_policy: "relative",
   force_case_insensitive: false,
   deletion_enabled: false,
+  include_matrix: false,
+  include_treemap: false,
 };
 
 export function ScanForm({ onSubmit, busy }: ScanFormProps) {
@@ -130,6 +132,27 @@ export function ScanForm({ onSubmit, busy }: ScanFormProps) {
             <option value="disabled">Disabled (safe)</option>
             <option value="enabled">Enabled (requires RW mount)</option>
           </select>
+        </div>
+        <div className="input-group">
+          <label>Optional Insights</label>
+          <div className="checkbox-stack">
+            <label>
+              <input
+                type="checkbox"
+                checked={form.include_matrix ?? false}
+                onChange={(event) => update("include_matrix", event.target.checked)}
+              />
+              Generate similarity matrix (higher RAM)
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={form.include_treemap ?? false}
+                onChange={(event) => update("include_treemap", event.target.checked)}
+              />
+              Generate duplicate-density treemap
+            </label>
+          </div>
         </div>
       </div>
     </form>

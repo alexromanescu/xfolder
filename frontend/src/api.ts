@@ -13,6 +13,8 @@ export interface ScanRequest {
   structure_policy?: "relative" | "bag_of_files";
   concurrency?: number;
   deletion_enabled?: boolean;
+  include_matrix?: boolean;
+  include_treemap?: boolean;
 }
 
 export interface WarningRecord {
@@ -34,6 +36,8 @@ export interface ScanProgress {
   phase?: string;
   last_path?: string | null;
   phases?: PhaseProgress[];
+  include_matrix: boolean;
+  include_treemap: boolean;
 }
 
 export interface PhaseProgress {

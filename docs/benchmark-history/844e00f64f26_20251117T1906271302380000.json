@@ -1,0 +1,143 @@
+{
+  "scan_id": "844e00f64f26",
+  "root_path": "/home/alex/Work/Projects/xfolder/test_mockup",
+  "started_at": "2025-11-17T19:06:27.130238+00:00",
+  "completed_at": "2025-11-17T19:06:51.918798+00:00",
+  "total_duration_seconds": 24.78856,
+  "stats": {
+    "files_scanned": 0,
+    "folders_scanned": 6118,
+    "folders_discovered": 6118,
+    "bytes_scanned": 0,
+    "workers": 32,
+    "total_folders": 6118,
+    "folders_aggregated": 6118
+  },
+  "phase_timings": [
+    {
+      "phase": "walking",
+      "started_at": "2025-11-17T19:06:27.130540+00:00",
+      "completed_at": "2025-11-17T19:06:27.517387+00:00",
+      "duration_seconds": 0.386847
+    },
+    {
+      "phase": "aggregating",
+      "started_at": "2025-11-17T19:06:27.517538+00:00",
+      "completed_at": "2025-11-17T19:06:27.648866+00:00",
+      "duration_seconds": 0.131328
+    },
+    {
+      "phase": "grouping",
+      "started_at": "2025-11-17T19:06:27.649016+00:00",
+      "completed_at": "2025-11-17T19:06:51.918801+00:00",
+      "duration_seconds": 24.269785
+    }
+  ],
+  "resource_samples": 6,
+  "peak_rss_bytes": 1800613888,
+  "peak_rss_mebibytes": 1717.19921875,
+  "average_rss_bytes": 349560832.0,
+  "resource_samples_detail": [
+    {
+      "timestamp": "2025-11-17T19:06:27.130922+00:00",
+      "seconds_since_start": 0.000684,
+      "phase": "walking",
+      "rss_bytes": 48812032,
+      "rss_mebibytes": 46.55078125,
+      "cpu_cores": 16,
+      "load_1m": 3.1640625,
+      "read_bytes": 0,
+      "write_bytes": 65536
+    },
+    {
+      "timestamp": "2025-11-17T19:06:27.517529+00:00",
+      "seconds_since_start": 0.387291,
+      "phase": null,
+      "rss_bytes": 61001728,
+      "rss_mebibytes": 58.17578125,
+      "cpu_cores": 16,
+      "load_1m": 3.1640625,
+      "read_bytes": 0,
+      "write_bytes": 77824
+    },
+    {
+      "timestamp": "2025-11-17T19:06:27.517578+00:00",
+      "seconds_since_start": 0.38734,
+      "phase": "aggregating",
+      "rss_bytes": 61001728,
+      "rss_mebibytes": 58.17578125,
+      "cpu_cores": 16,
+      "load_1m": 3.1640625,
+      "read_bytes": 0,
+      "write_bytes": 77824
+    },
+    {
+      "timestamp": "2025-11-17T19:06:27.649008+00:00",
+      "seconds_since_start": 0.51877,
+      "phase": null,
+      "rss_bytes": 62967808,
+      "rss_mebibytes": 60.05078125,
+      "cpu_cores": 16,
+      "load_1m": 3.1640625,
+      "read_bytes": 0,
+      "write_bytes": 77824
+    },
+    {
+      "timestamp": "2025-11-17T19:06:27.649057+00:00",
+      "seconds_since_start": 0.518819,
+      "phase": "grouping",
+      "rss_bytes": 62967808,
+      "rss_mebibytes": 60.05078125,
+      "cpu_cores": 16,
+      "load_1m": 3.1640625,
+      "read_bytes": 0,
+      "write_bytes": 77824
+    },
+    {
+      "timestamp": "2025-11-17T19:06:51.918951+00:00",
+      "seconds_since_start": 24.788713,
+      "phase": null,
+      "rss_bytes": 1800613888,
+      "rss_mebibytes": 1717.19921875,
+      "cpu_cores": 16,
+      "load_1m": 3.3291015625,
+      "read_bytes": 0,
+      "write_bytes": 77824
+    }
+  ],
+  "phase_memory_peaks": {
+    "walking": {
+      "timestamp": "2025-11-17T19:06:27.130922+00:00",
+      "seconds_since_start": 0.000684,
+      "phase": "walking",
+      "rss_bytes": 48812032,
+      "rss_mebibytes": 46.55078125,
+      "cpu_cores": 16,
+      "load_1m": 3.1640625,
+      "read_bytes": 0,
+      "write_bytes": 65536
+    },
+    "aggregating": {
+      "timestamp": "2025-11-17T19:06:27.517578+00:00",
+      "seconds_since_start": 0.38734,
+      "phase": "aggregating",
+      "rss_bytes": 61001728,
+      "rss_mebibytes": 58.17578125,
+      "cpu_cores": 16,
+      "load_1m": 3.1640625,
+      "read_bytes": 0,
+      "write_bytes": 77824
+    },
+    "grouping": {
+      "timestamp": "2025-11-17T19:06:27.649057+00:00",
+      "seconds_since_start": 0.518819,
+      "phase": "grouping",
+      "rss_bytes": 62967808,
+      "rss_mebibytes": 60.05078125,
+      "cpu_cores": 16,
+      "load_1m": 3.1640625,
+      "read_bytes": 0,
+      "write_bytes": 77824
+    }
+  }
+}

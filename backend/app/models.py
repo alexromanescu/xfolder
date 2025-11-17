@@ -48,6 +48,8 @@ class ScanRequest(BaseModel):
     structure_policy: StructurePolicy = StructurePolicy.RELATIVE
     concurrency: Optional[int] = Field(default=None, ge=1, le=32)
     deletion_enabled: bool = False
+    include_matrix: bool = False
+    include_treemap: bool = False
 
     @validator("root_path", pre=True)
     def normalize_root(cls, value: str | Path) -> Path:
@@ -124,6 +126,8 @@ class ScanProgress(BaseModel):
     phase: str = ""
     last_path: Optional[str] = None
     phases: List[PhaseProgress] = Field(default_factory=list)
+    include_matrix: bool = False
+    include_treemap: bool = False
 
 
 class ExportFilters(BaseModel):

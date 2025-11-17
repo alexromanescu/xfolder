@@ -73,6 +73,8 @@ export default function App() {
     () => scans.find((item) => item.scan_id === selectedScanId) ?? (scans[0] ?? null),
     [scans, selectedScanId],
   );
+  const matrixEnabled = currentScan?.include_matrix ?? false;
+  const treemapEnabled = currentScan?.include_treemap ?? false;
 
   const progressValue = currentScan?.progress ?? null;
   const etaLabel = formatEta(currentScan?.eta_seconds ?? null);
@@ -87,6 +89,21 @@ export default function App() {
     setSelectedGroupId(null);
     setComparisonEntries([]);
   }, [currentScan?.scan_id]);
+
+  useEffect(() => {
+    if (!currentScan) return;
+    if (matrixEnabled && !treemapEnabled && insightTab !== "matrix") {
+      setInsightTab("matrix");
+      return;
+    }
+    if (!matrixEnabled && treemapEnabled && insightTab !== "treemap") {
+      setInsightTab("treemap");
+      return;
+    }
+    if (!matrixEnabled && !treemapEnabled && insightTab !== "matrix") {
+      setInsightTab("matrix");
+    }
+  }, [currentScan?.scan_id, matrixEnabled, treemapEnabled, insightTab]);
 
   useEffect(() => {
     let cancelled = false;
@@ -182,34 +199,47 @@ export default function App() {
     if (!currentScan || currentScan.status !== "completed") {
       setMatrix(null);
       setTreemap(null);
+      setMatrixLoading(false);
+      setTreemapLoading(false);
       return;
     }
     let cancelled = false;
-    setMatrixLoading(true);
-    setTreemapLoading(true);
-    fetchSimilarityMatrix(currentScan.scan_id, { min_similarity: 0.6, limit: 250 })
-      .then((response) => {
-        if (!cancelled) setMatrix(response);
-      })
-      .catch((cause) => {
-        console.error("Failed to fetch matrix", cause);
-        if (!cancelled) setMatrix(null);
-      })
-      .finally(() => {
-        if (!cancelled) setMatrixLoading(false);
-      });
 
-    fetchTreemap(currentScan.scan_id)
-      .then((response) => {
-        if (!cancelled) setTreemap(response);
-      })
-      .catch((cause) => {
-        console.error("Failed to fetch treemap", cause);
-        if (!cancelled) setTreemap(null);
-      })
-      .finally(() => {
-        if (!cancelled) setTreemapLoading(false);
-      });
+    if (currentScan.include_matrix) {
+      setMatrixLoading(true);
+      fetchSimilarityMatrix(currentScan.scan_id, { min_similarity: 0.6, limit: 250 })
+        .then((response) => {
+          if (!cancelled) setMatrix(response);
+        })
+        .catch((cause) => {
+          console.error("Failed to fetch matrix", cause);
+          if (!cancelled) setMatrix(null);
+        })
+        .finally(() => {
+          if (!cancelled) setMatrixLoading(false);
+        });
+    } else {
+      setMatrix(null);
+      setMatrixLoading(false);
+    }
+
+    if (currentScan.include_treemap) {
+      setTreemapLoading(true);
+      fetchTreemap(currentScan.scan_id)
+        .then((response) => {
+          if (!cancelled) setTreemap(response);
+        })
+        .catch((cause) => {
+          console.error("Failed to fetch treemap", cause);
+          if (!cancelled) setTreemap(null);
+        })
+        .finally(() => {
+          if (!cancelled) setTreemapLoading(false);
+        });
+    } else {
+      setTreemap(null);
+      setTreemapLoading(false);
+    }
 
     return () => {
       cancelled = true;
@@ -425,6 +455,9 @@ export default function App() {
     files: currentScan?.stats?.files_scanned ?? 0,
     workers: currentScan?.stats?.workers ?? 0,
   };
+  const insightsAvailable = currentScan?.status === "completed" && (matrixEnabled || treemapEnabled);
+  const shouldShowMatrix = matrixEnabled && (!treemapEnabled || insightTab === "matrix");
+  const shouldShowTreemap = treemapEnabled && (!matrixEnabled || insightTab === "treemap");
 
   return (
     <div className="app-shell">
@@ -688,27 +721,41 @@ export default function App() {
           />
         ) : null}
 
-        {currentScan?.status === "completed" ? (
+        {insightsAvailable ? (
           <div className="panel">
             <div className="panel-header">
               <div>
                 <div className="panel-title">Visual Insights</div>
-                <p className="muted">Inspect adjacency heatmaps or the duplicate-density treemap.</p>
+                <p className="muted">
+                  {matrixEnabled && treemapEnabled
+                    ? "Inspect adjacency heatmaps or the duplicate-density treemap."
+                    : matrixEnabled
+                      ? "Adjacency heatmap was requested for this scan."
+                      : "Duplicate-density treemap was requested for this scan."}
+                </p>
               </div>
             </div>
-            <div className="tab-strip">
-              <div className={`tab ${insightTab === "matrix" ? "active" : ""}`} onClick={() => setInsightTab("matrix")}>
-                Matrix
+            {matrixEnabled && treemapEnabled ? (
+              <div className="tab-strip">
+                <div className={`tab ${insightTab === "matrix" ? "active" : ""}`} onClick={() => setInsightTab("matrix")}>
+                  Matrix
+                </div>
+                <div className={`tab ${insightTab === "treemap" ? "active" : ""}`} onClick={() => setInsightTab("treemap")}>
+                  Treemap
+                </div>
               </div>
-              <div className={`tab ${insightTab === "treemap" ? "active" : ""}`} onClick={() => setInsightTab("treemap")}>
-                Treemap
-              </div>
-            </div>
-            {insightTab === "matrix" ? (
+            ) : null}
+            {shouldShowMatrix ? (
               <SimilarityMatrixView entries={matrix?.entries ?? []} loading={matrixLoading} />
-            ) : (
+            ) : null}
+            {shouldShowTreemap ? (
               <DensityTreemap tree={treemap?.tree ?? null} loading={treemapLoading} />
-            )}
+            ) : null}
+          </div>
+        ) : currentScan?.status === "completed" ? (
+          <div className="panel">
+            <div className="panel-title">Visual Insights</div>
+            <p className="muted">This scan skipped matrix/treemap generation. Enable the checkboxes before launching to collect these artifacts.</p>
           </div>
         ) : null}
 
@@ -749,6 +796,8 @@ function scansEqual(a: ScanProgress[], b: ScanProgress[]): boolean {
       (left.completed_at ?? "") !== (right.completed_at ?? "") ||
       (left.progress ?? null) !== (right.progress ?? null) ||
       (left.eta_seconds ?? null) !== (right.eta_seconds ?? null) ||
+      left.include_matrix !== right.include_matrix ||
+      left.include_treemap !== right.include_treemap ||
       !statsEqual(left.stats ?? {}, right.stats ?? {})
     ) {
       return false;
