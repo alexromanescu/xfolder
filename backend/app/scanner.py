@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 from .cache import FileHashCache, FileCacheKey
-from .domain import FolderInfo
+from .domain import FolderInfo, GroupInfo
 from .models import (
     DirectoryFingerprint,
     DivergenceRecord,
@@ -587,7 +587,7 @@ def group_to_record(
     group: SimilarityGroup,
     label: FolderLabel,
     fingerprints: Dict[str, DirectoryFingerprint],
-) -> Tuple[str, List[FolderInfo], List[PairwiseSimilarity], List[DivergenceRecord]]:
+) -> GroupInfo:
     members = sorted(group.members, key=lambda f: (len(f.path), f.path))
     canonical = members[0]
     group_uuid = uuid.uuid5(uuid.NAMESPACE_URL, canonical.path)
@@ -599,7 +599,15 @@ def group_to_record(
         compared = fingerprints[members[1].relative_path]
         divergences = compute_divergences(base.file_weights, compared.file_weights)
 
-    return group_id, members, group.similarity_pairs, divergences
+    return GroupInfo(
+        group_id=group_id,
+        label=label,
+        canonical_path=canonical.path,
+        members=members,
+        pairwise_similarity=group.similarity_pairs,
+        divergences=divergences,
+        suppressed_descendants=False,
+    )
 
 
 def compute_divergences(a: Dict[str, int], b: Dict[str, int], top_k: int = 5) -> List[DivergenceRecord]:

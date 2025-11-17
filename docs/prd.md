@@ -90,6 +90,7 @@ Non-goals: cross-machine synchronization, deduplicating storage at the filesyste
   - Cap: `min(32, 2×CPU cores)`.
 - Memory-bounded queues for stat/read/hash tasks.
 - Persistent cache to skip re-hashing and re-reading unchanged files.
+- Internal data pipeline uses lightweight dataclasses for folder/group metadata while persisting fingerprints to disk, reducing Python object overhead and keeping REST schemas intact.
 - Candidate pruning before similarity:
   - Bucket by `(total_bytes, file_count)` and quick sketches.
   - Optional future LSH (Locality-Sensitive Hashing) hook; not required for v1.

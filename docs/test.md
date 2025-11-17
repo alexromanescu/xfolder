@@ -88,6 +88,7 @@ PYTHONPATH=app pytest -q
   3. In another terminal: `cd frontend && npm run dev`.
   4. Launch a scan with the mounted root; verify similarity group UI shows consolidated parent folders and relative paths.
 - **Deletion workflow**: On a scratch directory with RW access, enable deletion via the scan form, stage a plan, confirm quarantine path is populated under `<root>/.folderdupe_quarantine/YYYYMMDD`.
+- **Benchmark diagnostics**: `backend/.venv/bin/python backend/scripts/run_benchmark.py --json-output` should succeed, print phase/RSS summaries, and write a JSON artifact under `docs/benchmark-history/`.
 
 ## 3. Regression Expectations
 

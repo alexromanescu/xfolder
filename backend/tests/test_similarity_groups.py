@@ -5,7 +5,8 @@ from typing import List, Tuple
 
 import pytest
 
-from app.models import FolderLabel, FolderRecord, GroupRecord, ScanRequest
+from app.domain import GroupInfo
+from app.models import FolderLabel, ScanRequest
 from app.scanner import (
     FolderScanner,
     classify_groups,
@@ -174,21 +175,11 @@ def test_near_duplicate_parent_suppresses_child_identical(tmp_path: Path) -> Non
     groups = compute_similarity_groups(result.fingerprints, request.similarity_threshold)
     classified = classify_groups(groups, request.similarity_threshold, result.fingerprints)
 
-    records: List[Tuple[FolderLabel, GroupRecord]] = []
+    records: List[Tuple[FolderLabel, GroupInfo]] = []
     for label, groups_for_label in classified.items():
         for group, _ in groups_for_label:
-            group_id, members, pairs, divergences = group_to_record(group, label, result.fingerprints)
-            member_models = [_to_folder_record(member) for member in members]
-            record = GroupRecord(
-                group_id=group_id,
-                label=label,
-                canonical_path=member_models[0].path,
-                members=member_models,
-                pairwise_similarity=pairs,
-                divergences=divergences,
-                suppressed_descendants=False,
-            )
-            records.append((label, record))
+            info = group_to_record(group, label, result.fingerprints)
+            records.append((label, info))
 
     filtered = _suppress_descendant_groups_all(records)
     filtered_sets = [
@@ -200,11 +191,3 @@ def test_near_duplicate_parent_suppresses_child_identical(tmp_path: Path) -> Non
     assert all(
         not {"X/media", "Y/media"} <= members for members in filtered_sets
     ), "Child identical folders should be suppressed once parent group exists"
-def _to_folder_record(info):
-    return FolderRecord(
-        path=info.path,
-        relative_path=info.relative_path,
-        total_bytes=info.total_bytes,
-        file_count=info.file_count,
-        unstable=info.unstable,
-    )

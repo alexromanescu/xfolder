@@ -323,13 +323,13 @@ def _phase_for_timestamp(job: ScanJob, timestamp) -> Optional[str]:
 
 def collect_structure_metrics(job: ScanJob) -> Dict[str, Any]:
     metrics: Dict[str, Any] = {}
-    all_records: List[Any] = []
-    for records in job.groups.values():
-        all_records.extend(records)
-    metrics["group_records"] = len(all_records)
-    metrics["group_members_total"] = sum(len(record.members) for record in all_records)
-    metrics["group_pairwise_entries"] = sum(len(record.pairwise_similarity) for record in all_records)
-    metrics["group_divergence_entries"] = sum(len(record.divergences) for record in all_records)
+    all_infos: List[Any] = []
+    for records in getattr(job, "group_infos", {}).values():
+        all_infos.extend(records)
+    metrics["group_records"] = len(all_infos)
+    metrics["group_members_total"] = sum(len(info.members) for info in all_infos)
+    metrics["group_pairwise_entries"] = sum(len(info.pairwise_similarity) for info in all_infos)
+    metrics["group_divergence_entries"] = sum(len(info.divergences) for info in all_infos)
     metrics["matrix_entries"] = len(job.matrix_entries)
     fingerprint_count = 0
     if job.result and getattr(job.result, "fingerprints", None):

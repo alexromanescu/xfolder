@@ -34,7 +34,7 @@ This guide explains how to run the Folder Similarity Scanner in a headless mode 
    - `--extra-sample-interval N` enables a high-frequency RSS sampler (seconds between polls) so you can inspect the full memory curve.
    - `--profile-heap` turns on `tracemalloc` and records the top allocation sites at the end of the run.
 
-The script starts a `ScanManager`, waits for completion, and prints per-phase timings plus peak/average RSS gathered from `resource_samples`. It also reports each resource-sample timestamp and highlights the phase-specific memory peaks so you can pinpoint when the RAM surge occurs.
+The script starts a `ScanManager`, waits for completion, and prints per-phase timings plus peak/average RSS gathered from `resource_samples`. High-frequency sampling, object censuses, smaps snapshots, and per-phase heap profiles are available via the optional flags above, giving detailed visibility into when and where memory grows.
 
 ## Latest Recorded Results
 
@@ -45,17 +45,17 @@ The script starts a `ScanManager`, waits for completion, and prints per-phase ti
 
 | Phase | Duration (s) |
 | --- | --- |
-| walking | 0.39 |
-| aggregating | 0.13 |
-| grouping | 24.27 |
+| walking | 0.34 |
+| aggregating | 0.12 |
+| grouping | 22.77 |
 
 Additional metrics:
 
 | Metric | Value |
 | --- | --- |
-| Total wall time | 24.79 s |
-| Peak RSS | 1.68 GiB (1717.20 MiB) |
-| Average RSS | 0.33 GiB (333.37 MiB) |
+| Total wall time | 23.23 s |
+| Peak RSS | 1.67 GiB (1711.27 MiB) |
+| Average RSS | 0.33 GiB (328.16 MiB) |
 | Resource samples captured | 6 |
 | Folders scanned | 6,118 |
 

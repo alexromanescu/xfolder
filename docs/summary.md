@@ -17,6 +17,10 @@ This file captures the high-level state after the recent enhancements so we can 
   - Similarity Matrix view backed by `GET /api/scans/{scan_id}/matrix`, showing top-K adjacency pairs with a heatmap-like list.
   - Duplicate-density Treemap backed by `GET /api/scans/{scan_id}/density/treemap`, summarizing duplicate bytes per folder hierarchy.
   - Folder Comparison panel renders canonical + duplicates side-by-side, with a file-explorer-style list for each member and color-coded highlights for unique and mismatched entries; includes a toggle to hide/show matching files.
+- **Memory Instrumentation + Lightweight Models**
+  - Scanner, grouping, and analytics now operate on lightweight dataclasses (`FolderInfo`, `GroupInfo`) rather than pydantic models, dramatically reducing transient allocations; pydantic objects are only materialized at the REST boundary.
+  - Fingerprints are persisted to a shelve-backed store once grouping completes so scans no longer keep entire fingerprint maps in RAM.
+  - The benchmark harness gained phase heap snapshots, RSS timelines, smaps/object-census logging, and per-run JSON archives under `docs/benchmark-history/`.
 - **Diagnostics & Observability**
   - SSE log streaming via `GET /api/system/logs/stream`, wired into a Diagnostics drawer in the UI.
   - Resource snapshot endpoint `GET /api/system/resources` surfaces CPU cores/load, process RSS, and best-effort I/O bytes; diagnostics drawer polls this and shows a live resource strip.
@@ -33,7 +37,7 @@ This file captures the high-level state after the recent enhancements so we can 
 
 ## Next Steps / Roadmap
 
-1. **Adaptive Scaling & Pruning**: now that per-phase timings and bytes scanned are recorded, teach the scheduler to raise/lower worker counts and tweak candidate pruning thresholds based on live metrics, especially on >10M file trees.
+1. **Adaptive Scaling & Pruning**: now that per-phase timings and bytes scanned are recorded, teach the scheduler to raise/lower worker counts and tweak candidate pruning thresholds based on live metrics, especially on >10M file trees. Build on the new dataclass/fingerprint-store pipeline so the scheduler can spill group chunks to disk without rehydrating pydantic models.
 2. **Progress Channel Polish**: expand the SSE stream with scan-level diff summaries (e.g., recently completed groups) and add pagination-aware deltas so very large scan lists don’t flood the client; document proxy/timeout guidance for operators.
 3. **Operations & Alerting**: ship Grafana-ready dashboards for the new metrics, describe alert thresholds (active scan saturation, slow phases), and add CLI helpers that dump `/api/scans/{scan_id}/metrics` snapshots for support cases.
 

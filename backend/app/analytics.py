@@ -7,11 +7,13 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Tuple, Optional
 import heapq
 
-from .models import FolderLabel, GroupRecord, SimilarityMatrixEntry, TreemapNode
+from .domain import GroupInfo
+from .converters import folder_info_to_record
+from .models import FolderLabel, SimilarityMatrixEntry, TreemapNode
 
 
 def build_similarity_matrix(
-    records: Iterable[Tuple[FolderLabel, GroupRecord]],
+    records: Iterable[Tuple[FolderLabel, GroupInfo]],
     *,
     max_entries: Optional[int] = None,
     min_reclaim_bytes: int = 0,
@@ -25,9 +27,10 @@ def build_similarity_matrix(
     worker_cap = min(32, (os.cpu_count() or 4) * 2)
     worker_count = min(worker_cap, len(record_list))
 
-    def _process(item: Tuple[FolderLabel, GroupRecord]) -> List[SimilarityMatrixEntry]:
+    def _process(item: Tuple[FolderLabel, GroupInfo]) -> List[SimilarityMatrixEntry]:
         label, record = item
-        members = record.members
+        members_info = record.members
+        members = [folder_info_to_record(member) for member in members_info]
         if len(members) < 2 or not record.pairwise_similarity:
             return []
         chunk: List[SimilarityMatrixEntry] = []
@@ -70,7 +73,7 @@ def build_similarity_matrix(
         else:
             heap.append(((entry.similarity, entry.combined_bytes), entry))
 
-    def _consume(items: Iterable[Tuple[FolderLabel, GroupRecord]]) -> None:
+    def _consume(items: Iterable[Tuple[FolderLabel, GroupInfo]]) -> None:
         if worker_count <= 1:
             for item in items:
                 for entry in _process(item):
@@ -100,7 +103,7 @@ class _TreemapBuilder:
 
 
 def build_treemap(
-    records: Iterable[Tuple[FolderLabel, GroupRecord]],
+    records: Iterable[Tuple[FolderLabel, GroupInfo]],
     *,
     root_label: str,
     root_bytes: int,

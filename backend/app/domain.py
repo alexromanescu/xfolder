@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import List
 
 
 @dataclass
@@ -15,9 +16,9 @@ class FolderInfo:
 @dataclass
 class GroupInfo:
     group_id: str
-    label: str
+    label: "FolderLabel"
     canonical_path: str
-    members: list[FolderInfo]
-    pairwise_similarity: list
-    divergences: list
+    members: List[FolderInfo]
+    pairwise_similarity: List["PairwiseSimilarity"]
+    divergences: List["DivergenceRecord"]
     suppressed_descendants: bool = False

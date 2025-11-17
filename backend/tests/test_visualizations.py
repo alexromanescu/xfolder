@@ -4,14 +4,15 @@ from pathlib import Path
 from typing import List, Tuple
 
 from app.analytics import build_similarity_matrix, build_treemap
-from app.models import FolderLabel, FolderRecord, GroupRecord, ScanRequest, TreemapNode
+from app.domain import GroupInfo
+from app.models import FolderLabel, ScanRequest, TreemapNode
 from app.scanner import FolderScanner, classify_groups, compute_similarity_groups, group_to_record
 from app.store import _suppress_descendant_groups_all
 
 from .utils import write_file
 
 
-def _build_case(tmp_path: Path) -> Tuple[List[Tuple[FolderLabel, GroupRecord]], int, str]:
+def _build_case(tmp_path: Path) -> Tuple[List[Tuple[FolderLabel, GroupInfo]], int, str]:
     root = tmp_path / "photos"
     write_file(root / "albumA" / "set1" / "shot.raw", b"A" * 1024)
     write_file(root / "albumA" / "set1" / "notes.txt", b"meta")
@@ -25,21 +26,11 @@ def _build_case(tmp_path: Path) -> Tuple[List[Tuple[FolderLabel, GroupRecord]], 
     groups = compute_similarity_groups(result.fingerprints, request.similarity_threshold)
     classified = classify_groups(groups, request.similarity_threshold, result.fingerprints)
 
-    records: List[Tuple[FolderLabel, GroupRecord]] = []
+    records: List[Tuple[FolderLabel, GroupInfo]] = []
     for label, label_groups in classified.items():
         for group, _ in label_groups:
-            group_id, members, pairs, divergences = group_to_record(group, label, result.fingerprints)
-            members_model = [_to_folder_record(member) for member in members]
-            record = GroupRecord(
-                group_id=group_id,
-                label=label,
-                canonical_path=members_model[0].path,
-                members=members_model,
-                pairwise_similarity=pairs,
-                divergences=divergences,
-                suppressed_descendants=False,
-            )
-            records.append((label, record))
+            info = group_to_record(group, label, result.fingerprints)
+            records.append((label, info))
 
     filtered = _suppress_descendant_groups_all(records)
     root_bytes = result.fingerprints["."].folder.total_bytes if "." in result.fingerprints else 0
@@ -75,11 +66,3 @@ def _find_node(node: TreemapNode, target: str) -> TreemapNode | None:
         if match:
             return match
     return None
-def _to_folder_record(info):
-    return FolderRecord(
-        path=info.path,
-        relative_path=info.relative_path,
-        total_bytes=info.total_bytes,
-        file_count=info.file_count,
-        unstable=info.unstable,
-    )

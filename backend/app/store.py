@@ -17,8 +17,9 @@ from fastapi import HTTPException, status
 from .analytics import build_similarity_matrix, build_treemap
 from .cache import FileHashCache
 from .config import AppConfig
-from .domain import FolderInfo
+from .domain import FolderInfo, GroupInfo
 from .fingerprint_store import FingerprintStore
+from .converters import folder_info_to_record, group_info_to_record
 from .models import (
     DeletionPlan,
     DeletionPlanPayload,
@@ -59,16 +60,6 @@ from .metrics import MetricsExporter
 from .system import read_resource_sample
 
 
-def _folder_info_to_record(info: FolderInfo) -> FolderRecord:
-    return FolderRecord(
-        path=info.path,
-        relative_path=info.relative_path,
-        total_bytes=info.total_bytes,
-        file_count=info.file_count,
-        unstable=info.unstable,
-    )
-
-
 class ScanJob:
     def __init__(self, scan_id: str, request: ScanRequest) -> None:
         self.scan_id = scan_id
@@ -84,7 +75,7 @@ class ScanJob:
             "workers": 0,
         }
         self.result: Optional[ScanResult] = None
-        self.groups: Dict[FolderLabel, List[GroupRecord]] = defaultdict(list)
+        self.group_infos: Dict[FolderLabel, List[GroupInfo]] = defaultdict(list)
         self.error: Optional[str] = None
         self.meta: Dict[str, str] = {"phase": "", "last_path": ""}
         self.matrix_entries: List[SimilarityMatrixEntry] = []
@@ -275,12 +266,13 @@ class ScanManager:
         job = self.get_job(scan_id)
         if job.status != ScanStatus.COMPLETED:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Scan is not complete")
+        infos: List[GroupInfo] = []
         if label:
-            return job.groups.get(label, [])
-        groups: List[GroupRecord] = []
-        for records in job.groups.values():
-            groups.extend(records)
-        return groups
+            infos = job.group_infos.get(label, [])
+        else:
+            for records in job.group_infos.values():
+                infos.extend(records)
+        return [group_info_to_record(info) for info in infos]
 
     def get_similarity_matrix(
         self,
@@ -341,19 +333,19 @@ class ScanManager:
         if job.status != ScanStatus.COMPLETED or not job.result:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Scan is not complete")
 
-        target_record: Optional[GroupRecord] = None
-        for records in job.groups.values():
-            for record in records:
-                if record.group_id == group_id:
-                    target_record = record
+        target_info: Optional[GroupInfo] = None
+        for records in job.group_infos.values():
+            for info in records:
+                if info.group_id == group_id:
+                    target_info = info
                     break
-            if target_record:
+            if target_info:
                 break
-        if not target_record:
+        if not target_info:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
 
-        left_member = next((member for member in target_record.members if member.relative_path == left_relative), None)
-        right_member = next((member for member in target_record.members if member.relative_path == right_relative), None)
+        left_member = next((member for member in target_info.members if member.relative_path == left_relative), None)
+        right_member = next((member for member in target_info.members if member.relative_path == right_relative), None)
         if not left_member or not right_member:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Members not found in group")
 
@@ -379,15 +371,15 @@ class ScanManager:
         if job.status != ScanStatus.COMPLETED or not job.result:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Scan is not complete")
 
-        group_record: Optional[GroupRecord] = None
-        for groups in job.groups.values():
-            for record in groups:
-                if record.group_id == group_id:
-                    group_record = record
+        group_info: Optional[GroupInfo] = None
+        for records in job.group_infos.values():
+            for info in records:
+                if info.group_id == group_id:
+                    group_info = info
                     break
-            if group_record:
+            if group_info:
                 break
-        if not group_record:
+        if not group_info:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
 
         fingerprints = job.result.fingerprints
@@ -407,8 +399,8 @@ class ScanManager:
             folder_entries = [FolderEntry(path=entry.path, bytes=entry.bytes) for entry in entries]
             return MemberContents(relative_path=member.relative_path, entries=folder_entries)
 
-        canonical_contents = build_contents(group_record.members[0])
-        duplicate_contents = [build_contents(member) for member in group_record.members[1:]]
+        canonical_contents = build_contents(group_info.members[0])
+        duplicate_contents = [build_contents(member) for member in group_info.members[1:]]
 
         return GroupContents(
             group_id=group_id,
@@ -618,34 +610,24 @@ class ScanManager:
                 meta=job.meta,
             )
 
-            records_by_label: Dict[FolderLabel, List[GroupRecord]] = {label: [] for label in FolderLabel}
-            combined_records: List[Tuple[FolderLabel, GroupRecord]] = []
+            records_by_label: Dict[FolderLabel, List[GroupInfo]] = {label: [] for label in FolderLabel}
+            combined_records: List[Tuple[FolderLabel, GroupInfo]] = []
 
             for group in similarity_groups:
-                group_id, members_info, pairs, divergences = group_to_record(
+                info = group_to_record(
                     group,
                     FolderLabel.NEAR_DUPLICATE if group.max_similarity < 1.0 else FolderLabel.IDENTICAL,
                     result.fingerprints,
                 )
-                label = FolderLabel.NEAR_DUPLICATE if group.max_similarity < 1.0 else FolderLabel.IDENTICAL
-                members = [_folder_info_to_record(member) for member in members_info]
-                record = GroupRecord(
-                    group_id=group_id,
-                    label=label,
-                    canonical_path=members[0].path,
-                    members=members,
-                    pairwise_similarity=pairs,
-                    divergences=divergences,
-                    suppressed_descendants=False,
-                )
-                records_by_label[label].append(record)
-                combined_records.append((label, record))
+                label = info.label
+                records_by_label[label].append(info)
+                combined_records.append((label, info))
 
             filtered_records = _suppress_descendant_groups_all(combined_records)
             for label in FolderLabel:
-                job.groups[label] = []
-            for label, record in filtered_records:
-                job.groups[label].append(record)
+                job.group_infos[label] = []
+            for label, info in filtered_records:
+                job.group_infos[label].append(info)
 
             if job.request.include_matrix:
                 job.matrix_entries = build_similarity_matrix(
@@ -744,13 +726,13 @@ def _apply_filters(groups: List[GroupRecord], filters: ExportFilters) -> List[Gr
 
 
 def _suppress_descendant_groups_all(
-    records: List[Tuple[FolderLabel, GroupRecord]]
-) -> List[Tuple[FolderLabel, GroupRecord]]:
+    records: List[Tuple[FolderLabel, GroupInfo]]
+) -> List[Tuple[FolderLabel, GroupInfo]]:
     if not records:
         return []
 
     sorted_records = sorted(records, key=lambda item: _record_min_depth(item[1]))
-    kept: List[Tuple[FolderLabel, GroupRecord]] = []
+    kept: List[Tuple[FolderLabel, GroupInfo]] = []
     ancestor_sets: List[Set[Path]] = []
 
     for label, record in sorted_records:
@@ -779,7 +761,7 @@ def _is_descendant_path(child: Path, parent: Path) -> bool:
         return False
 
 
-def _record_min_depth(record: GroupRecord) -> int:
+def _record_min_depth(record: GroupInfo) -> int:
     depths = []
     for member in record.members:
         rel = member.relative_path or "."
