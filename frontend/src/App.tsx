@@ -35,14 +35,14 @@ import { WarningsPanel } from "./components/WarningsPanel";
 import { DiffModal } from "./components/DiffModal";
 import { ComparisonPanel, ComparisonEntry } from "./components/ComparisonPanel";
 
-type GroupTab = FolderLabel;
+type GroupTab = FolderLabel | "all";
 
-const TAB_ORDER: GroupTab[] = ["identical", "near_duplicate", "partial_overlap"];
+const TAB_ORDER: GroupTab[] = ["identical", "near_duplicate", "partial_overlap", "all"];
 
 export default function App() {
   const [scans, setScans] = useState<ScanProgress[]>([]);
   const [selectedScanId, setSelectedScanId] = useState<string | null>(null);
-  const [groupsByLabel, setGroupsByLabel] = useState<Record<GroupTab, GroupRecord[]>>({
+  const [groupsByLabel, setGroupsByLabel] = useState<Record<FolderLabel, GroupRecord[]>>({
     identical: [],
     near_duplicate: [],
     partial_overlap: [],
@@ -389,9 +389,11 @@ export default function App() {
   const currentWarnings: WarningRecord[] = currentScan?.warnings ?? [];
 
   const currentGroups =
-    activeTab === "identical"
-      ? [...groupsByLabel.identical, ...groupsByLabel.near_duplicate]
-      : groupsByLabel[activeTab] ?? [];
+    activeTab === "all"
+      ? [...groupsByLabel.identical, ...groupsByLabel.near_duplicate, ...groupsByLabel.partial_overlap]
+      : activeTab === "identical"
+        ? groupsByLabel.identical
+        : groupsByLabel[activeTab as FolderLabel] ?? [];
 
   const allGroups = useMemo(
     () => [...groupsByLabel.identical, ...groupsByLabel.near_duplicate, ...groupsByLabel.partial_overlap],
@@ -732,7 +734,9 @@ export default function App() {
                         ? "Identical"
                         : tab === "near_duplicate"
                           ? "Near Duplicate"
-                          : "Overlap Explorer"}
+                          : tab === "partial_overlap"
+                            ? "Overlap Explorer"
+                            : "All"}
                     </div>
                   ))}
                   <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>

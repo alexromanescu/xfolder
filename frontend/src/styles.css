@@ -716,9 +716,8 @@ select:focus {
   font-weight: 600;
   color: var(--text-100);
   font-size: 13px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-break: break-all;
+  white-space: normal;
 }
 
 .diff-grid {

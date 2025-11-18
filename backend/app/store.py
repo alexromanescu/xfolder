@@ -52,6 +52,7 @@ from .scanner import (
     FolderScanner,
     ScanResult,
     _identity_to_path,
+    classify_groups,
     compute_fingerprint_diff,
     compute_similarity_groups,
     group_to_record,
@@ -677,18 +678,20 @@ class ScanManager:
                 structure_policy=job.request.structure_policy,
             )
 
+            classified = classify_groups(
+                similarity_groups,
+                job.request.similarity_threshold,
+                result.fingerprints,
+            )
+
             records_by_label: Dict[FolderLabel, List[GroupInfo]] = {label: [] for label in FolderLabel}
             combined_records: List[Tuple[FolderLabel, GroupInfo]] = []
 
-            for group in similarity_groups:
-                info = group_to_record(
-                    group,
-                    FolderLabel.NEAR_DUPLICATE if group.max_similarity < 1.0 else FolderLabel.IDENTICAL,
-                    result.fingerprints,
-                )
-                label = info.label
-                records_by_label[label].append(info)
-                combined_records.append((label, info))
+            for label, items in classified.items():
+                for group, _score in items:
+                    info = group_to_record(group, label, result.fingerprints)
+                    records_by_label[label].append(info)
+                    combined_records.append((label, info))
 
             filtered_records = _suppress_descendant_groups_all(combined_records)
             for label in FolderLabel:

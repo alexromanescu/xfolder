@@ -448,6 +448,7 @@ def _parent_from_relative_path(rel_path: str) -> Optional[str]:
 def _promote_parent_groups(
     groups: List["SimilarityGroup"],
     fingerprints: Dict[str, DirectoryFingerprint],
+    threshold: float,
 ) -> List["SimilarityGroup"]:
     promoted: List[SimilarityGroup] = []
     for group in groups:
@@ -472,17 +473,18 @@ def _promote_parent_groups(
                     continue
                 left_fp = fingerprints[left.relative_path]
                 right_fp = fingerprints[right.relative_path]
-                similarity_pairs.append(
-                    PairwiseSimilarity(
-                        a=i,
-                        b=j,
-                        similarity=weighted_jaccard(
-                            left_fp.file_weights, right_fp.file_weights
-                        ),
+                similarity = weighted_jaccard(left_fp.file_weights, right_fp.file_weights)
+                if similarity >= threshold:
+                    similarity_pairs.append(
+                        PairwiseSimilarity(
+                            a=i,
+                            b=j,
+                            similarity=similarity,
+                        )
                     )
-                )
 
-        promoted.append(SimilarityGroup(parent_members, similarity_pairs))
+        if similarity_pairs:
+            promoted.append(SimilarityGroup(parent_members, similarity_pairs))
 
     return promoted
 
@@ -535,7 +537,7 @@ def compute_similarity_groups(
                     )
     merged = merge_groups(groups, threshold)
     if structure_policy == StructurePolicy.RELATIVE:
-        promoted = _promote_parent_groups(merged, fingerprints)
+        promoted = _promote_parent_groups(merged, fingerprints, threshold)
         if promoted:
             merged = merge_groups(merged + promoted, threshold)
     return merged
