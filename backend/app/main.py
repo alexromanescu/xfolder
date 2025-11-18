@@ -124,6 +124,12 @@ def get_scan_metrics(scan_id: str, manager: ScanManager = Depends(get_scan_manag
     return manager.get_metrics(scan_id)
 
 
+@app.post("/api/scans/{scan_id}/cancel", response_model=ScanProgress)
+def cancel_scan(scan_id: str, manager: ScanManager = Depends(get_scan_manager)) -> ScanProgress:
+    manager.cancel_scan(scan_id)
+    return manager.get_progress(scan_id)
+
+
 @app.get("/api/scans/{scan_id}/groups", response_model=list[GroupRecord])
 def get_groups(
     scan_id: str,

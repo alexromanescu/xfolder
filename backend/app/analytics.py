@@ -56,9 +56,14 @@ def build_similarity_matrix(
             )
         return chunk
 
-    heap: List[Tuple[Tuple[float, int], SimilarityMatrixEntry]] = []
+    # Use a (key, seq, entry) heap so ties on the key do not rely on
+    # comparing SimilarityMatrixEntry instances directly (which is
+    # unsupported under Pydantic v2).
+    heap: List[Tuple[Tuple[float, int], int, SimilarityMatrixEntry]] = []
+    entry_counter = 0
 
     def _maybe_add(entry: SimilarityMatrixEntry) -> None:
+        nonlocal entry_counter
         if not include_identical and entry.label == FolderLabel.IDENTICAL:
             return
         if entry.reclaimable_bytes < min_reclaim_bytes:
@@ -66,12 +71,16 @@ def build_similarity_matrix(
         if max_entries and max_entries > 0:
             key = (entry.similarity, entry.combined_bytes)
             if len(heap) < max_entries:
-                heapq.heappush(heap, (key, entry))
+                heapq.heappush(heap, (key, entry_counter, entry))
+                entry_counter += 1
             else:
                 if key > heap[0][0]:
-                    heapq.heapreplace(heap, (key, entry))
+                    heapq.heapreplace(heap, (key, entry_counter, entry))
+                    entry_counter += 1
         else:
-            heap.append(((entry.similarity, entry.combined_bytes), entry))
+            key = (entry.similarity, entry.combined_bytes)
+            heap.append((key, entry_counter, entry))
+            entry_counter += 1
 
     def _consume(items: Iterable[Tuple[FolderLabel, GroupInfo]]) -> None:
         if worker_count <= 1:
@@ -86,7 +95,7 @@ def build_similarity_matrix(
 
     _consume(record_list)
 
-    entries = [entry for _key, entry in heap]
+    entries = [entry for _key, _seq, entry in heap]
     entries.sort(key=lambda item: (item.similarity, item.combined_bytes), reverse=True)
     return entries
 

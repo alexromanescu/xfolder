@@ -55,6 +55,7 @@ The UI is organized as a compact dashboard:
 - **New Scan** occupies roughly one third of the top row on the left, with all fields stacked vertically for quick configuration.
 - **Active Scans** and key metrics (folders/files scanned, workers, potential reclaim) share the right-hand side; the active scan list scrolls inside its panel so it always fits beside the New Scan form.
 - **Similarity Explorer** (further down) shows a 1/3–2/3 split: similarity groups in a list or tree on the left, and Folder Comparison on the right. A draggable splitter lets you temporarily give more room to either side without breaking the layout.
+- **Scan Progress** (while a scan is running) shows live folder/file counters, a weighted overall progress bar, an indeterminate spinner for the walking phase, and percentage-based progress bars for aggregating/grouping. Each phase row displays a status icon, numeric percentage where applicable, and a compact history-friendly ETA line (`elapsed X — Ym Zs remaining`), plus a **Stop scan** button to cooperatively cancel long-running jobs.
 
 > **Tip:** To test an SMB/NFS share, mount it on the host first (e.g., `/mnt/share`) and scan that mount point.
 
@@ -125,5 +126,6 @@ The web UI and API are both available at `http://localhost:8080`. Use `/data` as
 - **Mounting SMB/NFS**: the scanner does not mount shares itself. Use system tools (e.g., `mount -t cifs ...`) before running the app.
 - **Port conflicts**: change `-p 8080:8080` or Vite’s default port in `frontend/vite.config.ts` if needed.
 - **Virtualenv reuse**: re-activate with `source backend/.venv/bin/activate` before running backend commands.
+ - **Long-running scans**: for very large trees, expect the overall progress bar to move quickly through the walking/aggregating phases and then spend most of its time in the grouping phase. The percentage and ETA should now advance smoothly instead of jumping to ~99% and stalling.
 
 Happy scanning!

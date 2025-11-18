@@ -35,6 +35,7 @@ class FolderLabel(str, Enum):
 class ScanStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"
+    CANCELLED = "cancelled"
     COMPLETED = "completed"
     FAILED = "failed"
 

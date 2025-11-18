@@ -1,6 +1,6 @@
 import axios from "axios";
 
-export type ScanStatus = "pending" | "running" | "completed" | "failed";
+export type ScanStatus = "pending" | "running" | "cancelled" | "completed" | "failed";
 export type FolderLabel = "identical" | "near_duplicate" | "partial_overlap";
 
 export interface ScanRequest {
@@ -193,6 +193,11 @@ export async function createScan(request: ScanRequest): Promise<ScanProgress> {
 
 export async function fetchScans(): Promise<ScanProgress[]> {
   const response = await api.get<ScanProgress[]>("/scans");
+  return response.data;
+}
+
+export async function cancelScan(scanId: string): Promise<ScanProgress> {
+  const response = await api.post<ScanProgress>(`/scans/${scanId}/cancel`);
   return response.data;
 }
 

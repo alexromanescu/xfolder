@@ -60,12 +60,14 @@ class FolderScanner:
         stats_sink: Optional[Dict[str, int]] = None,
         meta_sink: Optional[Dict[str, str]] = None,
         phase_callback: Optional[Callable[[str], None]] = None,
+        stop_event: Optional["threading.Event"] = None,
     ) -> None:
         self.request = request
         self.cache = cache
         self._stats_sink = stats_sink
         self._meta_sink = meta_sink
         self._phase_callback = phase_callback
+        self._stop_event = stop_event
         self._warnings: List[WarningRecord] = []
         self._stats: Dict[str, int] = defaultdict(int)
         self._seen_inodes: Set[Tuple[int, int]] = set()
@@ -88,6 +90,8 @@ class FolderScanner:
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             for dirpath, dirnames, filenames in os.walk(root):
+                if self._stop_event is not None and self._stop_event.is_set():
+                    break
                 current = Path(dirpath)
                 if getattr(self, "_meta_sink", None) is not None:
                     self._meta_sink["last_path"] = str(current)
@@ -111,6 +115,8 @@ class FolderScanner:
                 unstable = False
                 futures = []
                 for filename in filenames:
+                    if self._stop_event is not None and self._stop_event.is_set():
+                        break
                     if getattr(self, "_meta_sink", None) is not None:
                         self._meta_sink["last_path"] = str(current / filename)
                     futures.append(executor.submit(self._process_file, current, filename, rel_dir))
@@ -436,6 +442,7 @@ def compute_similarity_groups(
     threshold: float,
     stats: Optional[Dict[str, int]] = None,
     meta: Optional[Dict[str, str]] = None,
+    stop_event: Optional["threading.Event"] = None,
 ) -> List["SimilarityGroup"]:
     folders = list(fingerprints.values())
     buckets: Dict[int, List[DirectoryFingerprint]] = defaultdict(list)
@@ -455,8 +462,12 @@ def compute_similarity_groups(
         stats["similarity_pairs_processed"] = 0
 
     for bucket_items in buckets.values():
+        if stop_event is not None and stop_event.is_set():
+            break
         for i, a in enumerate(bucket_items):
             for b in bucket_items[i + 1 :]:
+                if stop_event is not None and stop_event.is_set():
+                    break
                 if stats is not None:
                     stats["similarity_pairs_processed"] += 1
                 if meta is not None:

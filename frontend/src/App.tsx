@@ -21,6 +21,7 @@ import {
   fetchScans,
   fetchSimilarityMatrix,
   fetchTreemap,
+  cancelScan,
 } from "./api";
 import { formatDate, humanBytes, humanDuration, formatEta } from "./format";
 import { MetricCard } from "./components/MetricCard";
@@ -79,9 +80,11 @@ export default function App() {
 
   const progressValue = currentScan?.progress ?? null;
   const etaLabel = formatEta(currentScan?.eta_seconds ?? null);
+  const elapsedLabel = currentScan ? humanDuration(currentScan.started_at, currentScan.completed_at) : "—";
   const phase = currentScan?.phase ?? "";
   const lastPath = currentScan?.last_path ?? "";
   const isRunning = currentScan?.status === "running";
+  const isCancellable = currentScan?.status === "running";
 
   useEffect(() => {
     setSelectedPaths(new Set<string>());
@@ -590,13 +593,37 @@ export default function App() {
             <div className="panel-header">
               <div>
                 <div className="panel-title">Scan Progress</div>
-                <p className="muted">Scanned {currentScan?.stats?.folders_scanned ?? 0} folders · {currentScan?.stats?.files_scanned ?? 0} files — {etaLabel}</p>
+                <p className="muted">
+                  Scanned {currentScan?.stats?.folders_scanned ?? 0} folders ·{" "}
+                  {currentScan?.stats?.files_scanned ?? 0} files — elapsed {elapsedLabel} — {etaLabel}
+                </p>
                 {phase || lastPath ? (
                   <p className="muted">Phase: {phase || "walking"}{lastPath ? ` — at ${lastPath}` : ""}</p>
                 ) : null}
               </div>
-              <div className="muted" style={{ fontWeight: 600 }}>
-                {progressValue != null ? `${Math.round(progressValue * 100)}%` : "Working…"}
+              <div className="panel-actions" style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div className="muted" style={{ fontWeight: 600 }}>
+                  {progressValue != null ? `${Math.round(progressValue * 100)}%` : "Working…"}
+                </div>
+                {isCancellable && currentScan ? (
+                  <button
+                    className="button secondary"
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const updated = await cancelScan(currentScan.scan_id);
+                        setScans((prev) =>
+                          prev.map((scan) => (scan.scan_id === updated.scan_id ? updated : scan)),
+                        );
+                      } catch (cause) {
+                        console.error("Failed to cancel scan", cause);
+                        setError("Unable to stop scan. Check server logs for details.");
+                      }
+                    }}
+                  >
+                    Stop scan
+                  </button>
+                ) : null}
               </div>
             </div>
             <div className={`progress-bar${progressValue == null ? " indeterminate" : ""}`}>
@@ -616,20 +643,35 @@ export default function App() {
                         : phaseProgress.name === "grouping"
                           ? "Grouping"
                           : phaseProgress.name;
+                  const isWalkingPhase = phaseProgress.name === "walking";
                   const value = phaseProgress.progress ?? null;
                   const isCompleted = phaseProgress.status === "completed";
                   const isRunningPhase = phaseProgress.status === "running";
+                  const percent = value != null ? Math.round(value * 100) : null;
                   return (
                     <div key={phaseProgress.name} style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 8, alignItems: "center" }}>
-                      <div className="muted" style={{ fontSize: 13 }}>
+                      <div
+                        className="muted"
+                        style={{
+                          fontSize: 13,
+                          fontWeight: isRunningPhase ? 600 : 400,
+                        }}
+                      >
                         {isCompleted ? "✔" : isRunningPhase ? "●" : "○"} {label}
+                        {!isWalkingPhase && percent != null ? ` — ${percent}%` : ""}
                       </div>
-                      <div className={`progress-bar phase${value == null ? " indeterminate" : ""}`}>
-                        <div
-                          className={`progress-bar-fill${value == null ? " indeterminate" : ""}`}
-                          style={value != null ? { width: `${Math.max(2, value * 100)}%` } : undefined}
-                        />
-                      </div>
+                      {isWalkingPhase ? (
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", minHeight: 12 }}>
+                          {isRunningPhase ? <div className="spinner" aria-label="Scanning filesystem" /> : null}
+                        </div>
+                      ) : (
+                        <div className={`progress-bar phase${value == null ? " indeterminate" : ""}`}>
+                          <div
+                            className={`progress-bar-fill${value == null ? " indeterminate" : ""}`}
+                            style={value != null ? { width: `${Math.max(2, value * 100)}%` } : undefined}
+                          />
+                        </div>
+                      )}
                     </div>
                   );
                 })}

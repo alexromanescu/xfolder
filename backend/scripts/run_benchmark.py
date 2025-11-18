@@ -544,6 +544,9 @@ def print_summary(summary: Dict[str, Any]) -> None:
             for stat in stats:
                 size_mb = stat["size_bytes"] / (1024 ** 2)
                 print(f"    - {stat['location']}: {size_mb:.2f} MiB ({stat['count']} allocs)")
+    progress_samples = summary.get("progress_samples") or []
+    if progress_samples:
+        print(f"Progress samples captured: {len(progress_samples)}")
 
 
 def main() -> None:
@@ -578,6 +581,7 @@ def main() -> None:
     )
 
     manager = ScanManager(app_config, executor_workers=args.workers)
+    progress_samples: List[Dict[str, Any]] = []
     tracer_base = None
     if args.profile_heap or args.phase_heap_snapshots:
         tracemalloc.start()
@@ -598,12 +602,53 @@ def main() -> None:
             if progress.phase and progress.phase != last_phase:
                 phase_profiler.capture(progress.phase)
                 last_phase = progress.phase
+            # Capture a lightweight progress timeline for benchmarking and
+            # progress curve tuning. Avoid storing the full ScanProgress
+            # model to keep memory usage flat even for long runs.
+            try:
+                now_ts = datetime.now(timezone.utc)
+                started_at = progress.started_at
+                elapsed = None
+                if started_at:
+                    elapsed = (now_ts - started_at).total_seconds()
+                phases_payload: List[Dict[str, Any]] = []
+                for phase in progress.phases or []:
+                    phases_payload.append(
+                        {
+                            "name": phase.name,
+                            "status": phase.status,
+                            "progress": phase.progress,
+                        }
+                    )
+                stats = progress.stats or {}
+                progress_samples.append(
+                    {
+                        "timestamp": now_ts.isoformat(),
+                        "seconds_since_start": elapsed,
+                        "status": getattr(progress.status, "value", progress.status),
+                        "phase": progress.phase,
+                        "progress": progress.progress,
+                        "eta_seconds": progress.eta_seconds,
+                        "stats": {
+                            "folders_scanned": stats.get("folders_scanned", 0),
+                            "folders_discovered": stats.get("folders_discovered", 0),
+                            "total_folders": stats.get("total_folders", 0),
+                            "folders_aggregated": stats.get("folders_aggregated", 0),
+                            "similarity_pairs_total": stats.get("similarity_pairs_total", 0),
+                            "similarity_pairs_processed": stats.get("similarity_pairs_processed", 0),
+                        },
+                        "phases": phases_payload,
+                    }
+                )
+            except Exception:
+                # Progress logging is best-effort; never interfere with the run.
+                pass
 
         final_job = wait_for_completion(
             manager,
             job,
             args.poll_interval,
-            progress_callback=progress_hook if (args.phase_heap_snapshots and tracer_base) else None,
+            progress_callback=progress_hook,
         )
     finally:
         extra_sampler.stop()
@@ -620,6 +665,8 @@ def main() -> None:
 
     summary = summarize(final_job)
     summary["structure_metrics"] = collect_structure_metrics(final_job)
+    if progress_samples:
+        summary["progress_samples"] = progress_samples
     if phase_profiler.records:
         summary["phase_heap_profile"] = phase_profiler.records
     extra_records = []

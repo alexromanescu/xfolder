@@ -20,6 +20,7 @@ from app.models import (
     FolderRecord,
     PhaseTiming,
     ResourceSample,
+    ScanProgress,
     ScanMetrics,
     SimilarityMatrixEntry,
     SimilarityMatrixResponse,
@@ -107,6 +108,10 @@ class _StubScanManager:
             phase_timings=[timing],
             resource_samples=[sample],
         )
+        self.cancelled_scan_id: str | None = None
+
+    def cancel_scan(self, scan_id: str) -> None:
+        self.cancelled_scan_id = scan_id
 
     def get_similarity_matrix(self, scan_id: str, *, min_similarity: float, limit: int, offset: int):
         self.matrix_calls.append((scan_id, min_similarity, limit, offset))
@@ -244,3 +249,37 @@ def test_metrics_endpoint(monkeypatch):
     response = client.get("/metrics")
     assert response.status_code == 200
     assert "metric" in response.text
+
+
+def test_cancel_scan_endpoint_invokes_manager(monkeypatch):
+    stub = _StubScanManager()
+
+    def _progress(scan_id: str) -> ScanProgress:  # type: ignore[override]
+        return ScanProgress(
+            scan_id=scan_id,
+            status="cancelled",
+            started_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(timezone.utc),
+            warnings=[],
+            root_path=Path("/data"),
+            stats={},
+            progress=None,
+            eta_seconds=None,
+            phase="",
+            last_path=None,
+            phases=[],
+            include_matrix=False,
+            include_treemap=False,
+        )
+
+    stub.get_progress = _progress  # type: ignore[attr-defined]
+    previous = _override_manager(stub)
+    client = TestClient(app)
+    try:
+        response = client.post("/api/scans/scan-demo/cancel")
+        assert response.status_code == 200
+        assert stub.cancelled_scan_id == "scan-demo"
+        payload = response.json()
+        assert payload["status"] == "cancelled"
+    finally:
+        _restore_manager(previous)

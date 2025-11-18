@@ -6,7 +6,7 @@ This file captures the high-level state after the recent enhancements so we can 
 
 - **Live Scan Telemetry**
   - `ScanProgress` includes `phase` (`walking`, `aggregating`, `grouping`) and `last_path`, plus streaming folder/file counts.
-  - Frontend progress card shows counters, overall progress bar, phase-specific progress bars with status icons, and ETA.
+  - Frontend progress card shows counters, a weighted overall progress bar, an indeterminate activity indicator for the walking phase, percentage-based phase progress for aggregating/grouping, and elapsed/ETA labels.
 - **Diff Endpoint & Modal**
   - REST: `GET /api/scans/{scan_id}/groups/{group_id}/diff` returns `only_left`, `only_right`, and `mismatched` entries (derived from aggregated fingerprints).
   - UI exposes “Compare” per near-duplicate member; modal renders side-by-side differences with byte stats.

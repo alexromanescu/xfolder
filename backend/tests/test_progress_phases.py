@@ -91,3 +91,46 @@ def test_phases_during_grouping(tmp_path):
   assert grouping.status == "running"
   assert grouping.progress and 0.4 < grouping.progress < 0.6
 
+
+def test_overall_progress_early_in_walk_phase(tmp_path):
+  manager = _make_manager(tmp_path)
+  request = ScanRequest(root_path=tmp_path)
+  job = ScanJob("scan_overall_walk", request)
+  job.status = ScanStatus.RUNNING
+  job.started_at = datetime.now(timezone.utc)
+  job.stats["folders_scanned"] = 5
+  job.stats["folders_discovered"] = 10
+  job.meta["phase"] = "walking"
+  _register_job(manager, job)
+
+  progress = manager.get_progress(job.scan_id)
+  # Walking is ~50% complete, but overall progress should still
+  # be relatively small because walking carries only ~20% weight.
+  assert progress.progress is not None
+  assert 0.05 <= progress.progress <= 0.20
+
+
+def test_overall_progress_mid_grouping_reflects_heavier_weight(tmp_path):
+  manager = _make_manager(tmp_path)
+  request = ScanRequest(root_path=tmp_path)
+  job = ScanJob("scan_overall_grouping", request)
+  job.status = ScanStatus.RUNNING
+  job.started_at = datetime.now(timezone.utc)
+  job.stats.update(
+    {
+      "folders_scanned": 10,
+      "folders_discovered": 10,
+      "total_folders": 10,
+      "folders_aggregated": 10,
+      "similarity_pairs_total": 100,
+      "similarity_pairs_processed": 50,
+    }
+  )
+  job.meta["phase"] = "grouping"
+  _register_job(manager, job)
+
+  progress = manager.get_progress(job.scan_id)
+  # With walking and aggregating complete and grouping ~50% done,
+  # overall progress should be dominated by the grouping weight.
+  assert progress.progress is not None
+  assert 0.60 <= progress.progress <= 0.70

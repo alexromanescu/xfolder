@@ -1024,6 +1024,24 @@ select:focus {
   animation: progress-indeterminate 1.4s infinite ease-in-out;
 }
 
+.spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(148, 163, 184, 0.4);
+  border-top-color: var(--primary);
+  animation: spinner-rotate 0.6s linear infinite;
+}
+
+@keyframes spinner-rotate {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
 @keyframes progress-indeterminate {
   0% {
     transform: translateX(0);

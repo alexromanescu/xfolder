@@ -84,6 +84,10 @@ class ScanJob:
         self.phase_sequence: List[str] = []
         self._current_phase: Optional[str] = None
         self.resource_samples: List[ResourceSample] = []
+        # Progress tracking helpers (kept tiny to avoid memory regressions)
+        self._overall_progress: float = 0.0
+        self._phase_progress: Dict[str, float] = {}
+        self._stop_event = threading.Event()
 
     def set_phase(self, name: str) -> None:
         if self._current_phase == name:
@@ -170,11 +174,12 @@ class ScanManager:
         walking_ratio = None
         aggregating_ratio = None
         grouping_ratio = None
-        scanned = stats_snapshot.get("folders_scanned", 0)
-        discovered = stats_snapshot.get("folders_discovered", 0)
-        discovered = max(discovered, scanned if scanned > 0 else 1)
-        if discovered > 0:
-            walking_ratio = scanned / discovered
+        scanned_folders = stats_snapshot.get("folders_scanned", 0)
+        discovered_folders = stats_snapshot.get("folders_discovered", 0)
+        # Use a non-decreasing denominator so walking progress does not regress
+        estimated_total_folders = max(discovered_folders, scanned_folders, 1)
+        if estimated_total_folders > 0:
+            walking_ratio = min(1.0, max(0.0, scanned_folders / estimated_total_folders))
 
         total_folders = stats_snapshot.get("total_folders", 0)
         folders_aggregated = stats_snapshot.get("folders_aggregated", 0)
@@ -186,57 +191,64 @@ class ScanManager:
         if pairs_total > 0:
             grouping_ratio = min(1.0, max(0.0, pairs_processed / pairs_total))
 
-        if job.status == ScanStatus.COMPLETED:
-            progress = 1.0
-            eta_seconds = 0
-        elif job.status == ScanStatus.RUNNING:
-            # Blend the three phases into a single progress estimate.
-            # Walking: 40%, Aggregation: 30%, Grouping: 30%.
-            overall = 0.0
-            if walking_ratio is not None:
-                overall += 0.4 * walking_ratio
-            if aggregating_ratio is not None:
-                overall += 0.3 * aggregating_ratio
-            if grouping_ratio is not None:
-                overall += 0.3 * grouping_ratio
-            if overall > 0:
-                progress = max(0.05, min(0.99, overall))
-            elapsed = (now - job.started_at).total_seconds()
-            if elapsed > 0 and scanned > 0:
-                rate = scanned / elapsed
-                remaining = max(discovered - scanned, 0)
-                if rate > 0:
-                    eta_seconds = int(remaining / rate)
-
         phases: List[PhaseProgress] = []
         current_phase = job.meta.get("phase", "")
         phase_names = ["walking", "aggregating", "grouping"]
 
-        def phase_status(name: str) -> tuple[str, float | None]:
-            if job.status == ScanStatus.COMPLETED:
-                return "completed", 1.0
+        def _smooth_phase_progress(name: str, raw: Optional[float], status: str) -> float:
+            """Clamp and monotonise per-phase progress without extra allocations."""
+            previous = job._phase_progress.get(name, 0.0)
+            if status == "completed":
+                value = 1.0
+            elif status == "pending":
+                # Do not rewind progress for phases we have already seen.
+                value = previous
+            else:  # running
+                if raw is None:
+                    value = previous
+                else:
+                    clamped = min(1.0, max(0.0, raw))
+                    if name == "walking":
+                        # For the filesystem walk phase we allow progress to
+                        # adjust as we discover more folders so the bar
+                        # doesn't jump to ~100% too early and then flatline.
+                        value = clamped
+                    else:
+                        # For later phases (with stable denominators) keep
+                        # progress monotonically non-decreasing.
+                        value = max(previous, clamped)
+            job._phase_progress[name] = value
+            return value
+
+        def phase_status(name: str) -> tuple[str, float]:
+            raw_progress: Optional[float] = None
+            if job.status in (ScanStatus.COMPLETED, ScanStatus.CANCELLED):
+                return "completed", _smooth_phase_progress(name, 1.0, "completed")
             if job.status == ScanStatus.PENDING:
-                return "pending", 0.0
+                return "pending", _smooth_phase_progress(name, 0.0, "pending")
             if current_phase == name:
                 if name == "walking" and walking_ratio is not None:
-                    return "running", walking_ratio
-                if name == "aggregating" and aggregating_ratio is not None:
-                    return "running", aggregating_ratio
-                if name == "grouping" and grouping_ratio is not None:
-                    return "running", grouping_ratio
-                return "running", None
+                    raw_progress = walking_ratio
+                elif name == "aggregating" and aggregating_ratio is not None:
+                    raw_progress = aggregating_ratio
+                elif name == "grouping" and grouping_ratio is not None:
+                    raw_progress = grouping_ratio
+                return "running", _smooth_phase_progress(name, raw_progress, "running")
             # Determine ordering by index in phase_names
             try:
                 idx = phase_names.index(name)
                 cur_idx = phase_names.index(current_phase) if current_phase in phase_names else -1
             except ValueError:
-                return "pending", 0.0
+                return "pending", _smooth_phase_progress(name, 0.0, "pending")
             if cur_idx > idx:
-                return "completed", 1.0
-            return "pending", 0.0
+                return "completed", _smooth_phase_progress(name, 1.0, "completed")
+            return "pending", _smooth_phase_progress(name, 0.0, "pending")
+
+        phase_progress_map: Dict[str, float] = {}
 
         for name in phase_names:
             status, phase_progress = phase_status(name)
+            phase_progress_map[name] = phase_progress
             phases.append(
                 PhaseProgress(
                     name=name,
@@ -244,6 +256,41 @@ class ScanManager:
                     progress=phase_progress,
                 )
             )
+
+        if job.status == ScanStatus.COMPLETED:
+            progress = 1.0
+            eta_seconds = 0
+        elif job.status == ScanStatus.RUNNING:
+            # Blend the three phases into a single progress estimate using
+            # weights tuned from benchmark timings: walking (20%),
+            # aggregating (10%), grouping (70%). This keeps early phases
+            # visible without letting grouping's long tail masquerade as
+            # "last 1%".
+            weights = {"walking": 0.2, "aggregating": 0.1, "grouping": 0.7}
+            overall_raw = 0.0
+            for name in phase_names:
+                phase_value = phase_progress_map.get(name, 0.0)
+                weight = weights.get(name, 0.0)
+                overall_raw += weight * phase_value
+            overall_raw = min(1.0, max(0.0, overall_raw))
+            if overall_raw > 0.0:
+                # Ensure overall progress is monotonically non-decreasing.
+                previous_overall = getattr(job, "_overall_progress", 0.0)
+                if overall_raw < previous_overall:
+                    overall_raw = previous_overall
+                else:
+                    job._overall_progress = overall_raw
+                # Keep the visible bar between 1% and 99% while running.
+                progress = min(0.99, max(0.01, overall_raw))
+                elapsed = (now - job.started_at).total_seconds()
+                if elapsed > 0:
+                    # Estimate ETA assuming work remaining is proportional to
+                    # (1 - overall_progress). Use the unclamped value so ETA
+                    # does not jump when we enforce display floors.
+                    eta_basis = max(overall_raw, 0.05)
+                    total_estimated = elapsed / eta_basis
+                    remaining = max(0.0, total_estimated - elapsed)
+                    eta_seconds = int(remaining)
 
         return ScanProgress(
             scan_id=job.scan_id,
@@ -573,6 +620,23 @@ class ScanManager:
         timings = [job.phase_timings[name] for name in job.phase_sequence if name in job.phase_timings]
         self._metrics.record_scan(job.stats.get("bytes_scanned", 0), timings)
 
+    def cancel_scan(self, scan_id: str) -> None:
+        """Request cooperative cancellation of a running scan.
+
+        This marks the job as CANCELLED and sets its stop event so the
+        scanner and grouping loops can exit early. The worker thread is
+        not force-killed; it will finish any in-flight work items and
+        then stop.
+        """
+        job = self.get_job(scan_id)
+        if job.status not in (ScanStatus.PENDING, ScanStatus.RUNNING):
+            return
+        job._stop_event.set()
+        job.status = ScanStatus.CANCELLED
+        job.completed_at = datetime.now(timezone.utc)
+        job.finish_phase()
+        self._update_active_metric()
+
     def get_metrics(self, scan_id: str) -> ScanMetrics:
         job = self.get_job(scan_id)
         timings = [job.phase_timings[name] for name in job.phase_sequence]
@@ -599,6 +663,7 @@ class ScanManager:
                 stats_sink=job.stats,
                 meta_sink=job.meta,
                 phase_callback=job.handle_phase_transition,
+                stop_event=job._stop_event,
             )
             result = scanner.scan()
             job.meta["phase"] = "grouping"
@@ -608,6 +673,7 @@ class ScanManager:
                 job.request.similarity_threshold,
                 stats=job.stats,
                 meta=job.meta,
+                stop_event=job._stop_event,
             )
 
             records_by_label: Dict[FolderLabel, List[GroupInfo]] = {label: [] for label in FolderLabel}

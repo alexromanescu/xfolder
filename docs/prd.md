@@ -126,8 +126,8 @@ Non-goals: cross-machine synchronization, deduplicating storage at the filesyste
   - Stability and permission warnings.
 - Progress telemetry:
   - Live counters for folders/files scanned, folders discovered, active workers.
-  - Overall progress bar plus per-phase progress bars for `walking` (filesystem traversal), `aggregating` (hierarchy roll-up), and `grouping` (similarity computation), each with a status indicator and percentage.
-  - Rolling ETA derived primarily from filesystem walk throughput, with phase information surfaced via `ScanProgress.phases`.
+  - Overall progress bar plus an indeterminate activity indicator for `walking` (filesystem traversal) and percentage-based per-phase progress bars for `aggregating` (hierarchy roll-up) and `grouping` (similarity computation). Overall progress is a weighted blend (walking ≈20%, aggregating ≈10%, grouping ≈70%) so long grouping runs no longer appear as a “stuck at 99%” tail.
+  - Rolling ETA derived from the blended overall progress and elapsed runtime, with phase information and per-phase ratios surfaced via `ScanProgress.phases` for finer-grained diagnostics.
 - Exports: current view → Markdown, JSON (JavaScript Object Notation), CSV (Comma-Separated Values).
 - Internationalization: UTF-8 only for v1.
 - Diff visualization:

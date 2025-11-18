@@ -12,8 +12,9 @@ export function formatDate(value?: string): string {
 }
 
 export function humanDuration(start?: string, end?: string): string {
-  if (!start || !end) return "—";
-  const delta = Math.max(0, new Date(end).getTime() - new Date(start).getTime());
+  if (!start) return "—";
+  const effectiveEnd = end ?? new Date().toISOString();
+  const delta = Math.max(0, new Date(effectiveEnd).getTime() - new Date(start).getTime());
   const seconds = Math.floor(delta / 1000);
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);

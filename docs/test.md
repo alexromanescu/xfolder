@@ -71,7 +71,7 @@ PYTHONPATH=app pytest -q
 
 - **Frontend build parity**: `cd frontend && npm run build` should pass (catches TypeScript/React integration issues).
 - **Progress view**: While a scan runs, confirm folder/file counters increment, phase/last-path update, progress bar advances, and ETA updates.
-  - Confirm the three phase bars (Filesystem walk, Aggregation, Grouping) advance over time and show sensible percentages rather than jumping to 99% immediately.
+  - Confirm the Aggregation and Grouping phase bars advance over time and show sensible percentages rather than jumping to 99% immediately, while the Filesystem walk phase shows an indeterminate spinner. Overall progress should ramp smoothly (walking/aggregating first, then grouping) without large backslides or long “stuck at 99%” tails, especially when scanning the `test_mockup/progress_shapes/` fixtures.
 - **Push progress channel**: With the devtools Network tab open, verify the `/api/scans/events` SSE stream stays connected and the UI keeps updating without polling even when the tab is idle.
 - **Diff modal**: On a near-duplicate entry, hit **Compare** and verify the modal lists “only in” paths and mismatched sizes.
 - **Tree view**: Toggle to Tree, expand nodes, use search, and confirm stats/badges match expectations.

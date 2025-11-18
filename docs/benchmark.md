@@ -6,6 +6,9 @@ This guide explains how to run the Folder Similarity Scanner in a headless mode 
 
 - The repository ships `test_mockup/` at the root. It exercises common similarity scenarios (identical photos, near matches, sparse trees, etc.) and is safe to scan locally.
 - The benchmark script defaults to this directory, so no additional fixtures or paths are required.
+- Inside `test_mockup/`, the `progress_shapes/` subtree adds synthetic edge cases for progress tuning:
+  - `walk_heavy_shallow/` contains many small, unique files under a single directory so walking dominates while grouping finds almost no work.
+  - `group_heavy_cluster/` contains several near-identical folder copies so grouping dominates despite a relatively light walk.
 
 ## Running the Benchmark
 
@@ -34,7 +37,7 @@ This guide explains how to run the Folder Similarity Scanner in a headless mode 
    - `--extra-sample-interval N` enables a high-frequency RSS sampler (seconds between polls) so you can inspect the full memory curve.
    - `--profile-heap` turns on `tracemalloc` and records the top allocation sites at the end of the run.
 
-The script starts a `ScanManager`, waits for completion, and prints per-phase timings plus peak/average RSS gathered from `resource_samples`. High-frequency sampling, object censuses, smaps snapshots, and per-phase heap profiles are available via the optional flags above, giving detailed visibility into when and where memory grows.
+The script starts a `ScanManager`, waits for completion, and prints per-phase timings plus peak/average RSS gathered from `resource_samples`. High-frequency sampling, object censuses, smaps snapshots, and per-phase heap profiles are available via the optional flags above, giving detailed visibility into when and where memory grows. Each run also records a lightweight progress timeline (`progress_samples`) with overall progress, per-phase ratios, and ETA so you can inspect how the progress curves behave on different mock trees.
 
 ## Latest Recorded Results
 
