@@ -1,0 +1,4 @@
+# Synthetic benchmark/fixture trees that can be recreated locally.
+# Keep them out of the repository to avoid bloating the history.
+/test_mockup/
+
