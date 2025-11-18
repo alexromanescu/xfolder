@@ -23,7 +23,11 @@ def _build_case(tmp_path: Path) -> Tuple[List[Tuple[FolderLabel, GroupInfo]], in
     request = ScanRequest(root_path=root)
     scanner = FolderScanner(request)
     result = scanner.scan()
-    groups = compute_similarity_groups(result.fingerprints, request.similarity_threshold)
+    groups = compute_similarity_groups(
+        result.fingerprints,
+        request.similarity_threshold,
+        structure_policy=request.structure_policy,
+    )
     classified = classify_groups(groups, request.similarity_threshold, result.fingerprints)
 
     records: List[Tuple[FolderLabel, GroupInfo]] = []

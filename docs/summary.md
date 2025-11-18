@@ -43,6 +43,12 @@ This file captures the high-level state after the recent enhancements so we can 
   - “Active Scans” and the metrics cards were moved into a shared right-hand panel, opposite New Scan, so you always see the launch controls and current scan list side by side.
   - The active scans table scrolls within a fixed-height panel that matches the New Scan height, and the summary metric cards sit directly beneath it, giving the whole top section a compact, consistent dashboard feel.
 
+## Recent Fixes
+
+- **Parent-Level Similarity Groups**
+  - When scanning with `structure_policy="relative"`, identical or near-identical sibling folders (e.g., `B/`, `C/`, `D/`) now collapse into a single parent-level group instead of surfacing separate child groups.
+  - Canonical selection prefers the shallowest, most-connected folder in the cluster, and descendant groups are suppressed once their parents are grouped.
+
 ## Key Tests / Validation
 
 - Backend unit suite (`backend/tests/`) covers nested identicals, threshold demotion, empty trees, unique files, ancestor suppression (identical & near). Command: `PYTHONPATH=app .venv/bin/python -m pytest -q`.

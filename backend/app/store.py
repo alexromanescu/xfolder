@@ -674,6 +674,7 @@ class ScanManager:
                 stats=job.stats,
                 meta=job.meta,
                 stop_event=job._stop_event,
+                structure_policy=job.request.structure_policy,
             )
 
             records_by_label: Dict[FolderLabel, List[GroupInfo]] = {label: [] for label in FolderLabel}

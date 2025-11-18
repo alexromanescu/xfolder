@@ -49,7 +49,11 @@ def test_nested_x_directories_cluster_without_root(tmp_path: Path, structure_pol
     scanner = FolderScanner(request)
     result = scanner.scan()
 
-    groups = compute_similarity_groups(result.fingerprints, request.similarity_threshold)
+    groups = compute_similarity_groups(
+        result.fingerprints,
+        request.similarity_threshold,
+        structure_policy=request.structure_policy,
+    )
     classified = classify_groups(groups, request.similarity_threshold, result.fingerprints)
 
     identical_groups = classified[FolderLabel.IDENTICAL]
@@ -78,7 +82,11 @@ def test_similarity_threshold_prevents_false_matches(tmp_path: Path) -> None:
 
     scanner = FolderScanner(request)
     result = scanner.scan()
-    groups = compute_similarity_groups(result.fingerprints, request.similarity_threshold)
+    groups = compute_similarity_groups(
+        result.fingerprints,
+        request.similarity_threshold,
+        structure_policy=request.structure_policy,
+    )
     classified = classify_groups(groups, request.similarity_threshold, result.fingerprints)
 
     identical_sets = [
@@ -105,7 +113,11 @@ def test_empty_directories_do_not_group(tmp_path: Path) -> None:
     scanner = FolderScanner(request)
     result = scanner.scan()
 
-    groups = compute_similarity_groups(result.fingerprints, request.similarity_threshold)
+    groups = compute_similarity_groups(
+        result.fingerprints,
+        request.similarity_threshold,
+        structure_policy=request.structure_policy,
+    )
     classified = classify_groups(groups, request.similarity_threshold, result.fingerprints)
 
     assert not classified[FolderLabel.IDENTICAL], "Empty directories should not form identical groups"
@@ -121,7 +133,11 @@ def test_unique_files_remain_isolated(tmp_path: Path) -> None:
     request = ScanRequest(root_path=root, file_equality="name_size")
     scanner = FolderScanner(request)
     result = scanner.scan()
-    groups = compute_similarity_groups(result.fingerprints, request.similarity_threshold)
+    groups = compute_similarity_groups(
+        result.fingerprints,
+        request.similarity_threshold,
+        structure_policy=request.structure_policy,
+    )
     classified = classify_groups(groups, request.similarity_threshold, result.fingerprints)
 
     assert not classified[FolderLabel.IDENTICAL]
@@ -137,7 +153,11 @@ def test_parent_supersedes_children(tmp_path: Path) -> None:
     request = ScanRequest(root_path=root)
     scanner = FolderScanner(request)
     result = scanner.scan()
-    groups = compute_similarity_groups(result.fingerprints, request.similarity_threshold)
+    groups = compute_similarity_groups(
+        result.fingerprints,
+        request.similarity_threshold,
+        structure_policy=request.structure_policy,
+    )
     classified = classify_groups(groups, request.similarity_threshold, result.fingerprints)
 
     identical_sets = [
@@ -172,7 +192,11 @@ def test_near_duplicate_parent_suppresses_child_identical(tmp_path: Path) -> Non
     request = ScanRequest(root_path=root)
     scanner = FolderScanner(request)
     result = scanner.scan()
-    groups = compute_similarity_groups(result.fingerprints, request.similarity_threshold)
+    groups = compute_similarity_groups(
+        result.fingerprints,
+        request.similarity_threshold,
+        structure_policy=request.structure_policy,
+    )
     classified = classify_groups(groups, request.similarity_threshold, result.fingerprints)
 
     records: List[Tuple[FolderLabel, GroupInfo]] = []
@@ -191,3 +215,54 @@ def test_near_duplicate_parent_suppresses_child_identical(tmp_path: Path) -> Non
     assert all(
         not {"X/media", "Y/media"} <= members for members in filtered_sets
     ), "Child identical folders should be suppressed once parent group exists"
+
+
+def test_parent_level_grouping_and_canonical_selection(tmp_path: Path) -> None:
+    root = tmp_path / "parent_promoted"
+    heavy = b"big" * 100
+    light = b"small"
+
+    for parent in ("B", "C"):
+        write_file(root / parent / "X1" / "file.bin", heavy)
+        write_file(root / parent / "X2" / "file.bin", heavy)
+        write_file(root / parent / "X3" / "file.bin", light)
+
+    write_file(root / "D" / "X1" / "file.bin", heavy)
+    write_file(root / "D" / "X2" / "file.bin", heavy)
+    write_file(root / "D" / "X31" / "file.bin", light)
+
+    request = ScanRequest(root_path=root, structure_policy="relative")
+    scanner = FolderScanner(request)
+    result = scanner.scan()
+
+    groups = compute_similarity_groups(
+        result.fingerprints,
+        request.similarity_threshold,
+        structure_policy=request.structure_policy,
+    )
+    classified = classify_groups(groups, request.similarity_threshold, result.fingerprints)
+
+    records: List[Tuple[FolderLabel, GroupInfo]] = []
+    for label, grouped in classified.items():
+        for group, _ in grouped:
+            records.append((label, group_to_record(group, label, result.fingerprints)))
+
+    filtered = _suppress_descendant_groups_all(records)
+    member_sets = [
+        {member.relative_path for member in info.members}
+        for _, info in filtered
+    ]
+
+    assert {"B", "C", "D"} in member_sets
+    parent_record = next(
+        info for _, info in filtered if {member.relative_path for member in info.members} == {"B", "C", "D"}
+    )
+    assert parent_record.label == FolderLabel.NEAR_DUPLICATE
+    assert Path(parent_record.canonical_path).name == "B"
+
+    assert all(
+        not any(path.startswith(prefix) for prefix in ("B/", "C/", "D/"))
+        for members in member_sets
+        for path in members
+        if members != {"B", "C", "D"}
+    ), "Descendant groups should be suppressed once parent cluster exists"

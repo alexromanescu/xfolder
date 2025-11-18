@@ -437,12 +437,63 @@ def _identity_to_path(identity: str) -> str:
     return identity
 
 
+def _parent_from_relative_path(rel_path: str) -> Optional[str]:
+    rel = Path(rel_path)
+    if rel == Path("."):
+        return None
+    parent = rel.parent
+    return "." if str(parent) == "." else parent.as_posix()
+
+
+def _promote_parent_groups(
+    groups: List["SimilarityGroup"],
+    fingerprints: Dict[str, DirectoryFingerprint],
+) -> List["SimilarityGroup"]:
+    promoted: List[SimilarityGroup] = []
+    for group in groups:
+        parents: Dict[str, FolderInfo] = {}
+        for member in group.members:
+            parent_rel = _parent_from_relative_path(member.relative_path)
+            if parent_rel is None:
+                continue
+            parent_fp = fingerprints.get(parent_rel)
+            if not parent_fp:
+                continue
+            parents[parent_rel] = parent_fp.folder
+
+        if len(parents) <= 1:
+            continue
+
+        parent_members = list(parents.values())
+        similarity_pairs: List[PairwiseSimilarity] = []
+        for i, left in enumerate(parent_members):
+            for j, right in enumerate(parent_members):
+                if j <= i:
+                    continue
+                left_fp = fingerprints[left.relative_path]
+                right_fp = fingerprints[right.relative_path]
+                similarity_pairs.append(
+                    PairwiseSimilarity(
+                        a=i,
+                        b=j,
+                        similarity=weighted_jaccard(
+                            left_fp.file_weights, right_fp.file_weights
+                        ),
+                    )
+                )
+
+        promoted.append(SimilarityGroup(parent_members, similarity_pairs))
+
+    return promoted
+
+
 def compute_similarity_groups(
     fingerprints: Dict[str, DirectoryFingerprint],
     threshold: float,
     stats: Optional[Dict[str, int]] = None,
     meta: Optional[Dict[str, str]] = None,
     stop_event: Optional["threading.Event"] = None,
+    structure_policy: StructurePolicy = StructurePolicy.RELATIVE,
 ) -> List["SimilarityGroup"]:
     folders = list(fingerprints.values())
     buckets: Dict[int, List[DirectoryFingerprint]] = defaultdict(list)
@@ -482,7 +533,12 @@ def compute_similarity_groups(
                             similarity_pairs=[PairwiseSimilarity(a=0, b=1, similarity=similarity)],
                         )
                     )
-    return merge_groups(groups, threshold)
+    merged = merge_groups(groups, threshold)
+    if structure_policy == StructurePolicy.RELATIVE:
+        promoted = _promote_parent_groups(merged, fingerprints)
+        if promoted:
+            merged = merge_groups(merged + promoted, threshold)
+    return merged
 
 
 def weighted_jaccard(a: Dict[str, int], b: Dict[str, int]) -> float:
@@ -599,14 +655,33 @@ def classify_groups(
 ) -> Dict[FolderLabel, List[Tuple[SimilarityGroup, float]]]:
     classified: Dict[FolderLabel, List[Tuple[SimilarityGroup, float]]] = defaultdict(list)
     for group in groups:
+        similarities: Dict[Tuple[int, int], float] = {}
+        for pair in group.similarity_pairs:
+            key = tuple(sorted((pair.a, pair.b)))
+            similarities[key] = pair.similarity
 
-        max_similarity = group.max_similarity
-        if max_similarity >= 1.0 - 1e-9:
+        member_count = len(group.members)
+        for i in range(member_count):
+            for j in range(i + 1, member_count):
+                key = (i, j)
+                if key not in similarities:
+                    left = fingerprints[group.members[i].relative_path]
+                    right = fingerprints[group.members[j].relative_path]
+                    similarities[key] = weighted_jaccard(
+                        left.file_weights, right.file_weights
+                    )
+
+        similarity_values = list(similarities.values()) or [0.0]
+        max_similarity = max(similarity_values)
+        min_similarity = min(similarity_values)
+
+        if min_similarity >= 1.0 - 1e-9:
             label = FolderLabel.IDENTICAL
         elif max_similarity >= threshold:
             label = FolderLabel.NEAR_DUPLICATE
         else:
             label = FolderLabel.PARTIAL_OVERLAP
+
         if label == FolderLabel.IDENTICAL:
             base_bytes = group.members[0].total_bytes
             base_count = group.members[0].file_count
@@ -623,23 +698,63 @@ def group_to_record(
     label: FolderLabel,
     fingerprints: Dict[str, DirectoryFingerprint],
 ) -> GroupInfo:
-    members = sorted(group.members, key=lambda f: (len(f.path), f.path))
-    canonical = members[0]
+    members = group.members
+    similarity_totals = [0.0 for _ in members]
+    for pair in group.similarity_pairs:
+        similarity_totals[pair.a] += pair.similarity
+        similarity_totals[pair.b] += pair.similarity
+
+    def _depth(member: FolderInfo) -> int:
+        rel = Path(member.relative_path)
+        return 0 if rel == Path(".") else len(rel.parts)
+
+    canonical_index = min(
+        range(len(members)),
+        key=lambda idx: (
+            _depth(members[idx]),
+            -similarity_totals[idx],
+            members[idx].path,
+        ),
+    )
+    canonical = members[canonical_index]
+    reordered_members: List[FolderInfo] = [canonical]
+    for idx, member in enumerate(members):
+        if idx == canonical_index:
+            continue
+        reordered_members.append(member)
+
+    index_map = {canonical_index: 0}
+    current = 1
+    for idx in range(len(members)):
+        if idx == canonical_index:
+            continue
+        index_map[idx] = current
+        current += 1
+
+    remapped_pairs = [
+        PairwiseSimilarity(
+            a=index_map.get(pair.a, pair.a),
+            b=index_map.get(pair.b, pair.b),
+            similarity=pair.similarity,
+        )
+        for pair in group.similarity_pairs
+    ]
+
     group_uuid = uuid.uuid5(uuid.NAMESPACE_URL, canonical.path)
     group_id = f"g_{group_uuid.hex[:8]}"
     divergences: List[DivergenceRecord] = []
 
-    if label != FolderLabel.IDENTICAL and len(members) >= 2:
-        base = fingerprints[members[0].relative_path]
-        compared = fingerprints[members[1].relative_path]
+    if label != FolderLabel.IDENTICAL and len(reordered_members) >= 2:
+        base = fingerprints[reordered_members[0].relative_path]
+        compared = fingerprints[reordered_members[1].relative_path]
         divergences = compute_divergences(base.file_weights, compared.file_weights)
 
     return GroupInfo(
         group_id=group_id,
         label=label,
         canonical_path=canonical.path,
-        members=members,
-        pairwise_similarity=group.similarity_pairs,
+        members=reordered_members,
+        pairwise_similarity=remapped_pairs,
         divergences=divergences,
         suppressed_descendants=False,
     )
