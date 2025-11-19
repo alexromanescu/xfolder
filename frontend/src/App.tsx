@@ -38,6 +38,8 @@ import { ComparisonPanel, ComparisonEntry } from "./components/ComparisonPanel";
 type GroupTab = FolderLabel | "all";
 
 const TAB_ORDER: GroupTab[] = ["identical", "near_duplicate", "partial_overlap", "all"];
+type GroupSortKey = "path" | "reclaimable";
+type SortDirection = "asc" | "desc";
 
 export default function App() {
   const [scans, setScans] = useState<ScanProgress[]>([]);
@@ -51,6 +53,8 @@ export default function App() {
   const [loadingScan, setLoadingScan] = useState(false);
   const [loadingGroups, setLoadingGroups] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "tree">("list");
+  const [groupSort, setGroupSort] = useState<GroupSortKey>("path");
+  const [groupSortDir, setGroupSortDir] = useState<SortDirection>("asc");
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
   const [plan, setPlan] = useState<DeletionPlan | null>(null);
   const [planResult, setPlanResult] = useState<DeletionResult | null>(null);
@@ -394,6 +398,27 @@ export default function App() {
       : activeTab === "identical"
         ? groupsByLabel.identical
         : groupsByLabel[activeTab as FolderLabel] ?? [];
+
+  const sortedGroups = useMemo(() => {
+    const base = [...currentGroups];
+    const direction = groupSortDir === "asc" ? 1 : -1;
+    return base.sort((a, b) => {
+      if (groupSort === "path") {
+        const left = a.canonical_path.toLowerCase();
+        const right = b.canonical_path.toLowerCase();
+        if (left === right) {
+          return direction * a.group_id.localeCompare(b.group_id);
+        }
+        return direction * left.localeCompare(right);
+      }
+      const reclaimA = calculateReclaimableBytes(a);
+      const reclaimB = calculateReclaimableBytes(b);
+      if (reclaimA === reclaimB) {
+        return direction * a.canonical_path.localeCompare(b.canonical_path);
+      }
+      return direction * (reclaimA - reclaimB);
+    });
+  }, [currentGroups, groupSort, groupSortDir]);
 
   const allGroups = useMemo(
     () => [...groupsByLabel.identical, ...groupsByLabel.near_duplicate, ...groupsByLabel.partial_overlap],
@@ -761,6 +786,34 @@ export default function App() {
                     </button>
                   </div>
                 </div>
+                <div
+                  style={{
+                    marginTop: 8,
+                    display: "flex",
+                    gap: 12,
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <label className="muted" style={{ fontSize: 13, display: "flex", gap: 8, alignItems: "center" }}>
+                    Sort by
+                    <select
+                      value={groupSort}
+                      onChange={(event) => setGroupSort(event.target.value as GroupSortKey)}
+                      style={{ padding: "2px 6px" }}
+                    >
+                      <option value="path">Path</option>
+                      <option value="reclaimable">Recoverable size</option>
+                    </select>
+                  </label>
+                  <button
+                    className="button secondary"
+                    type="button"
+                    onClick={() => setGroupSortDir((prev) => (prev === "asc" ? "desc" : "asc"))}
+                  >
+                    {groupSortDir === "asc" ? "Asc ↑" : "Desc ↓"}
+                  </button>
+                </div>
                 <div className="groups-table-shell">
                   {loadingGroups ? (
                     <p className="muted" style={{ padding: 12 }}>
@@ -768,7 +821,7 @@ export default function App() {
                     </p>
                   ) : viewMode === "list" ? (
                     <GroupTable
-                      groups={currentGroups}
+                      groups={sortedGroups}
                       rootPath={currentScan.root_path}
                       selected={selectedPaths}
                       onToggle={togglePath}
@@ -780,7 +833,7 @@ export default function App() {
                   ) : (
                     <TreeView
                       rootPath={currentScan.root_path}
-                      groups={currentGroups}
+                      groups={sortedGroups}
                       onSelectGroup={handleSelectGroup}
                       selectedGroupId={selectedGroupId}
                     />
@@ -940,4 +993,13 @@ function statsEqual(
     }
   }
   return true;
+}
+
+function calculateReclaimableBytes(group: GroupRecord): number {
+  if (!group || !group.members || group.members.length < 2) {
+    return 0;
+  }
+  return group.members
+    .slice(1)
+    .reduce((sum, member) => sum + Number(member.total_bytes || 0), 0);
 }
