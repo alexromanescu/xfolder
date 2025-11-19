@@ -266,3 +266,47 @@ def test_parent_level_grouping_and_canonical_selection(tmp_path: Path) -> None:
         for path in members
         if members != {"B", "C", "D"}
     ), "Descendant groups should be suppressed once parent cluster exists"
+
+
+def test_parent_level_grouping_with_partial_third(tmp_path: Path) -> None:
+    root = tmp_path / "parent_partial"
+    heavy = b"big" * 100
+    light = b"small"
+
+    # B and C share three children with identical contents.
+    for parent in ("B", "C"):
+        write_file(root / parent / "X1" / "file.bin", heavy)
+        write_file(root / parent / "X2" / "file.bin", heavy)
+        write_file(root / parent / "X3" / "file.bin", light)
+
+    # D shares only X1 plus an unrelated Y1, so it should not join
+    # the parent-level B/C cluster.
+    write_file(root / "D" / "X1" / "file.bin", heavy)
+    write_file(root / "D" / "Y1" / "file.bin", heavy)
+
+    request = ScanRequest(root_path=root, structure_policy="relative")
+    scanner = FolderScanner(request)
+    result = scanner.scan()
+
+    groups = compute_similarity_groups(
+        result.fingerprints,
+        request.similarity_threshold,
+        structure_policy=request.structure_policy,
+    )
+    classified = classify_groups(groups, request.similarity_threshold, result.fingerprints)
+
+    records: List[Tuple[FolderLabel, GroupInfo]] = []
+    for label, grouped in classified.items():
+        for group, _ in grouped:
+            records.append((label, group_to_record(group, label, result.fingerprints)))
+
+    filtered = _suppress_descendant_groups_all(records)
+    member_sets = [
+        {member.relative_path for member in info.members}
+        for _, info in filtered
+    ]
+
+    # B and C should form a parent-level group.
+    assert {"B", "C"} in member_sets
+    # D must not be pulled into that parent cluster.
+    assert {"B", "C", "D"} not in member_sets

@@ -807,8 +807,32 @@ def _suppress_descendant_groups_all(
 
     for label, record in sorted_records:
         member_paths = [Path(member.path) for member in record.members]
+        # Drop groups whose members are wholly contained inside the
+        # descendants of an already-kept parent cluster.
         if any(_all_members_descend(member_paths, ancestors) for ancestors in ancestor_sets):
             continue
+
+        # Avoid "bridging" groups that mix descendants of an existing
+        # parent cluster with folders outside that cluster. For example,
+        # once {B, C} is grouped at the parent level, a leaf group
+        # {B/X1, C/X1, D/X1} should not appear as a separate identical/
+        # near-duplicate set.
+        suppress_for_bridge = False
+        for ancestors in ancestor_sets:
+            # For this ancestor cluster, track which members of the
+            # candidate record descend from it.
+            descendant_flags = [
+                any(_is_descendant_path(member, ancestor) for ancestor in ancestors)
+                for member in member_paths
+            ]
+            if sum(1 for flag in descendant_flags if flag) >= 2 and any(
+                not flag for flag in descendant_flags
+            ):
+                suppress_for_bridge = True
+                break
+        if suppress_for_bridge:
+            continue
+
         kept.append((label, record))
         ancestor_sets.append({Path(member.path) for member in record.members})
 

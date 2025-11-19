@@ -483,6 +483,9 @@ export default function App() {
     }, 0);
   }, [groupsByLabel]);
 
+  const identicalGroupCount = groupsByLabel.identical.length;
+  const nearDuplicateGroupCount = groupsByLabel.near_duplicate.length;
+
   const summaryStats = {
     folders: currentScan?.stats?.folders_scanned ?? 0,
     files: currentScan?.stats?.files_scanned ?? 0,
@@ -583,6 +586,8 @@ export default function App() {
                       value={summaryStats.workers ? summaryStats.workers.toString() : "auto"}
                     />
                     <MetricCard title="Potential Reclaim" value={humanBytes(totalPotentialReclaim)} />
+                    <MetricCard title="Identical Groups" value={identicalGroupCount.toLocaleString()} />
+                    <MetricCard title="Near-duplicate Groups" value={nearDuplicateGroupCount.toLocaleString()} />
                   </div>
                 </div>
               </div>
