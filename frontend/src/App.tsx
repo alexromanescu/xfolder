@@ -40,6 +40,23 @@ type GroupTab = FolderLabel | "all";
 const TAB_ORDER: GroupTab[] = ["identical", "near_duplicate", "partial_overlap", "all"];
 type GroupSortKey = "path" | "reclaimable";
 type SortDirection = "asc" | "desc";
+type Theme = "dark" | "light";
+
+function resolveThemePreference(): Theme {
+  if (typeof window === "undefined") return "dark";
+  try {
+    const stored = window.localStorage.getItem("xfolder-theme");
+    if (stored === "dark" || stored === "light") {
+      return stored;
+    }
+  } catch {
+    // Ignore storage failures and fall back to system preference.
+  }
+  const prefersLight =
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-color-scheme: light)").matches;
+  return prefersLight ? "light" : "dark";
+}
 
 export default function App() {
   const [scans, setScans] = useState<ScanProgress[]>([]);
@@ -74,6 +91,13 @@ export default function App() {
   const [comparisonContents, setComparisonContents] = useState<GroupContents | null>(null);
   const [showMatchingEntries, setShowMatchingEntries] = useState(true);
   const [groupsPaneWidth, setGroupsPaneWidth] = useState<number | null>(null);
+  const [theme, setTheme] = useState<Theme>(() => {
+    const preferred = resolveThemePreference();
+    if (typeof document !== "undefined") {
+      document.documentElement.dataset.theme = preferred;
+    }
+    return preferred;
+  });
 
   const currentScan = useMemo<ScanProgress | null>(
     () => scans.find((item) => item.scan_id === selectedScanId) ?? (scans[0] ?? null),
@@ -89,6 +113,17 @@ export default function App() {
   const lastPath = currentScan?.last_path ?? "";
   const isRunning = currentScan?.status === "running";
   const isCancellable = currentScan?.status === "running";
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+    try {
+      window.localStorage.setItem("xfolder-theme", theme);
+    } catch {
+      // Best-effort persistence only.
+    }
+  }, [theme]);
 
   useEffect(() => {
     setSelectedPaths(new Set<string>());
@@ -531,9 +566,19 @@ export default function App() {
               space with a guarded deletion workflow.
             </p>
           </div>
-          <button className="button secondary" type="button" onClick={() => setDiagnosticsOpen(true)}>
-            Diagnostics
-          </button>
+          <div className="header-actions">
+            <button
+              className="button secondary"
+              type="button"
+              onClick={() => setTheme((prev) => (prev === "dark" ? "light" : "dark"))}
+              aria-pressed={theme === "light"}
+            >
+              {theme === "dark" ? "Light theme" : "Dark theme"}
+            </button>
+            <button className="button secondary" type="button" onClick={() => setDiagnosticsOpen(true)}>
+              Diagnostics
+            </button>
+          </div>
         </div>
       </header>
       <main className="app-content">
@@ -573,7 +618,7 @@ export default function App() {
                                 cursor: "pointer",
                                 background:
                                   scan.scan_id === currentScan.scan_id
-                                    ? "rgba(56, 189, 248, 0.08)"
+                                    ? "var(--table-selected-bg)"
                                     : undefined,
                               }}
                             >
@@ -934,7 +979,7 @@ export default function App() {
         <WarningsPanel warnings={currentWarnings} />
 
         {error ? (
-          <div className="panel" style={{ borderColor: "rgba(248, 113, 113, 0.4)" }}>
+          <div className="panel" style={{ borderColor: "var(--danger-border)" }}>
             <div className="panel-title">Something went wrong</div>
             <p className="muted">{error}</p>
           </div>

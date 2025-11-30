@@ -1,5 +1,6 @@
 :root {
-  color-scheme: dark light;
+  --color-scheme: dark;
+  color-scheme: var(--color-scheme, dark);
   --bg-900: #0f172a;
   --bg-800: #111827;
   --bg-700: #1f2937;
@@ -7,18 +8,160 @@
   --surface-500: #25304a;
   --primary: #38bdf8;
   --primary-dark: #0ea5e9;
-  --primary-contrast: #0f172a;
+  --primary-contrast: #0b172a;
+  --primary-bright: #60a5fa;
+  --primary-soft: rgba(56, 189, 248, 0.45);
   --text-100: #f8fafc;
   --text-300: #cbd5f5;
   --text-500: #94a3b8;
   --border: rgba(148, 163, 184, 0.2);
+  --border-strong: rgba(148, 163, 184, 0.24);
+  --border-medium: rgba(148, 163, 184, 0.18);
+  --border-soft: rgba(148, 163, 184, 0.12);
+  --border-muted: rgba(148, 163, 184, 0.1);
+  --border-faint: rgba(148, 163, 184, 0.08);
   --success: #22c55e;
   --warning: #facc15;
   --danger: #f97316;
+
+  --bg-gradient: radial-gradient(circle at top left, #1e293b, #0b1220);
+  --header-gradient: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(14, 116, 144, 0));
+  --header-border: rgba(56, 189, 248, 0.2);
+
+  --card-bg: rgba(15, 23, 42, 0.65);
+  --card-border-hover: rgba(56, 189, 248, 0.35);
+  --card-shadow: 0 16px 45px -36px rgba(59, 130, 246, 0.6);
+
+  --panel-bg: rgba(15, 23, 42, 0.7);
+  --panel-shadow: 0 18px 40px -30px rgba(56, 189, 248, 0.6);
+  --panel-contrast-bg: rgba(15, 23, 42, 0.6);
+  --panel-muted-bg: rgba(15, 23, 42, 0.5);
+  --panel-strong-bg: rgba(15, 23, 42, 0.55);
+  --muted-surface: rgba(15, 23, 42, 0.4);
+  --muted-strong-surface: rgba(15, 23, 42, 0.45);
+  --progress-track: rgba(15, 23, 42, 0.5);
+  --spinner-track: rgba(148, 163, 184, 0.4);
+
+  --table-hover-bg: rgba(15, 118, 110, 0.08);
+  --table-selected-bg: rgba(59, 130, 246, 0.12);
+
+  --badge-identical-bg: rgba(34, 197, 94, 0.12);
+  --badge-near-bg: rgba(250, 204, 21, 0.12);
+  --badge-partial-bg: rgba(249, 115, 22, 0.12);
+  --badge-identical-color: var(--success);
+  --badge-near-color: var(--warning);
+  --badge-partial-color: var(--danger);
+  --pill-bg: rgba(56, 189, 248, 0.12);
+  --accent-border: rgba(56, 189, 248, 0.4);
+
+  --input-bg: rgba(15, 23, 42, 0.7);
+  --input-bg-focus: rgba(15, 23, 42, 0.9);
+  --focus-border: rgba(56, 189, 248, 0.7);
+
+  --secondary-bg: rgba(15, 118, 110, 0.1);
+  --secondary-border: rgba(94, 234, 212, 0.2);
+  --danger-bg: rgba(239, 68, 68, 0.16);
+  --danger-border: rgba(248, 113, 113, 0.4);
+  --danger-text: #fca5a5;
+  --warning-bg: rgba(239, 68, 68, 0.08);
+  --warning-border: rgba(248, 113, 113, 0.2);
+
+  --backdrop: rgba(15, 23, 42, 0.76);
+  --modal-bg: rgba(15, 23, 42, 0.95);
+  --modal-shadow: 0 24px 64px -32px rgba(15, 118, 110, 0.4);
+
+  --drawer-backdrop: rgba(15, 23, 42, 0.6);
+  --drawer-bg: rgba(15, 23, 42, 0.95);
+
+  --handle-gradient: radial-gradient(circle at center, rgba(148, 163, 184, 0.4), transparent);
+  --treemap-gradient: linear-gradient(90deg, rgba(59, 130, 246, 0.6), rgba(56, 189, 248, 0.3));
+  --primary-shadow: 0 14px 30px -20px rgba(56, 189, 248, 0.9);
+  --button-hover-shadow: 0 18px 34px -28px rgba(96, 165, 250, 0.9);
+
   font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
   background-color: var(--bg-900);
   color: var(--text-100);
+}
+
+:root[data-theme="light"] {
+  --color-scheme: light;
+  --bg-900: #f5f7fb;
+  --bg-800: #e8edf7;
+  --bg-700: #dbe5f5;
+  --surface-600: #ffffff;
+  --surface-500: #eef2fb;
+  --primary: #2563eb;
+  --primary-dark: #1d4ed8;
+  --primary-contrast: #0b1220;
+  --primary-bright: #93c5fd;
+  --primary-soft: rgba(59, 130, 246, 0.5);
+  --text-100: #0f172a;
+  --text-300: #1f2937;
+  --text-500: #475569;
+  --border: rgba(100, 116, 139, 0.28);
+  --border-strong: rgba(100, 116, 139, 0.32);
+  --border-medium: rgba(100, 116, 139, 0.26);
+  --border-soft: rgba(100, 116, 139, 0.16);
+  --border-muted: rgba(100, 116, 139, 0.12);
+  --border-faint: rgba(100, 116, 139, 0.08);
+  --success: #16a34a;
+  --warning: #eab308;
+  --danger: #ef4444;
+
+  --bg-gradient: radial-gradient(circle at top left, #e0e7ff, #f8fafc);
+  --header-gradient: linear-gradient(135deg, rgba(59, 130, 246, 0.18), rgba(14, 165, 233, 0));
+  --header-border: rgba(59, 130, 246, 0.28);
+
+  --card-bg: rgba(255, 255, 255, 0.9);
+  --card-border-hover: rgba(59, 130, 246, 0.4);
+  --card-shadow: 0 16px 45px -28px rgba(59, 130, 246, 0.35);
+
+  --panel-bg: rgba(255, 255, 255, 0.96);
+  --panel-shadow: 0 18px 40px -30px rgba(59, 130, 246, 0.25);
+  --panel-contrast-bg: rgba(255, 255, 255, 0.92);
+  --panel-muted-bg: rgba(255, 255, 255, 0.9);
+  --panel-strong-bg: rgba(255, 255, 255, 0.92);
+  --muted-surface: rgba(239, 246, 255, 0.92);
+  --muted-strong-surface: rgba(226, 232, 240, 0.96);
+  --progress-track: rgba(226, 232, 240, 0.9);
+  --spinner-track: rgba(100, 116, 139, 0.5);
+
+  --table-hover-bg: rgba(59, 130, 246, 0.08);
+  --table-selected-bg: rgba(59, 130, 246, 0.14);
+
+  --badge-identical-bg: rgba(34, 197, 94, 0.14);
+  --badge-near-bg: rgba(234, 179, 8, 0.14);
+  --badge-partial-bg: rgba(249, 115, 22, 0.14);
+  --badge-identical-color: #15803d;
+  --badge-near-color: #92400e;
+  --badge-partial-color: #b45309;
+  --pill-bg: rgba(37, 99, 235, 0.12);
+  --accent-border: rgba(59, 130, 246, 0.4);
+
+  --input-bg: rgba(255, 255, 255, 0.96);
+  --input-bg-focus: #ffffff;
+  --focus-border: rgba(59, 130, 246, 0.8);
+
+  --secondary-bg: rgba(59, 130, 246, 0.12);
+  --secondary-border: rgba(59, 130, 246, 0.3);
+  --danger-bg: rgba(239, 68, 68, 0.12);
+  --danger-border: rgba(239, 68, 68, 0.3);
+  --danger-text: #b91c1c;
+  --warning-bg: rgba(234, 179, 8, 0.14);
+  --warning-border: rgba(234, 179, 8, 0.3);
+
+  --backdrop: rgba(15, 23, 42, 0.48);
+  --modal-bg: #ffffff;
+  --modal-shadow: 0 24px 64px -32px rgba(15, 23, 42, 0.28);
+
+  --drawer-backdrop: rgba(15, 23, 42, 0.36);
+  --drawer-bg: #ffffff;
+
+  --handle-gradient: radial-gradient(circle at center, rgba(148, 163, 184, 0.5), transparent);
+  --treemap-gradient: linear-gradient(90deg, rgba(37, 99, 235, 0.55), rgba(59, 130, 246, 0.3));
+  --primary-shadow: 0 14px 30px -20px rgba(59, 130, 246, 0.55);
+  --button-hover-shadow: 0 18px 34px -28px rgba(59, 130, 246, 0.5);
 }
 
 * {
@@ -28,7 +171,7 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: radial-gradient(circle at top left, #1e293b, #0b1220);
+  background: var(--bg-gradient);
   background-attachment: fixed;
 }
 
@@ -49,8 +192,8 @@ button {
 
 .app-header {
   padding: 20px 32px 8px;
-  background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(14, 116, 144, 0));
-  border-bottom: 1px solid rgba(56, 189, 248, 0.2);
+  background: var(--header-gradient);
+  border-bottom: 1px solid var(--header-border);
 }
 
 .app-header h1 {
@@ -73,6 +216,12 @@ button {
   flex-wrap: wrap;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .app-content {
   flex: 1;
   padding: 12px 32px 32px;
@@ -82,18 +231,18 @@ button {
 }
 
 .card {
-  background: rgba(15, 23, 42, 0.65);
+  background: var(--card-bg);
   backdrop-filter: blur(12px);
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 14px;
-  box-shadow: 0 16px 45px -36px rgba(59, 130, 246, 0.6);
+  box-shadow: var(--card-shadow);
   transition: transform 0.2s ease, border 0.2s ease;
 }
 
 .card:hover {
   transform: translateY(-4px);
-  border-color: rgba(56, 189, 248, 0.35);
+  border-color: var(--card-border-hover);
 }
 
 .card-title {
@@ -121,11 +270,11 @@ button {
 }
 
 .panel {
-  background: rgba(15, 23, 42, 0.7);
+  background: var(--panel-bg);
   border-radius: 18px;
   border: 1px solid var(--border);
   padding: 14px 16px;
-  box-shadow: 0 18px 40px -30px rgba(56, 189, 248, 0.6);
+  box-shadow: var(--panel-shadow);
 }
 
 .panel-header {
@@ -148,7 +297,7 @@ button {
 .tab-strip {
   display: flex;
   gap: 16px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  border-bottom: 1px solid var(--border);
   margin-bottom: 12px;
 }
 
@@ -174,7 +323,7 @@ button {
   bottom: -1px;
   height: 3px;
   border-radius: 9999px;
-  background: linear-gradient(90deg, var(--primary), #60a5fa);
+  background: linear-gradient(90deg, var(--primary), var(--primary-bright));
 }
 
 .table {
@@ -187,7 +336,7 @@ button {
 .table th,
 .table td {
   padding: 8px 10px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  border-bottom: 1px solid var(--border-soft);
   vertical-align: top;
 }
 
@@ -201,10 +350,10 @@ button {
 }
 
 .table tbody tr:hover {
-  background: rgba(15, 118, 110, 0.08);
+  background: var(--table-hover-bg);
 }
 .table tbody tr.selected {
-  background: rgba(59, 130, 246, 0.12);
+  background: var(--table-selected-bg);
 }
 
 .badge {
@@ -220,25 +369,25 @@ button {
 }
 
 .badge.identical {
-  background: rgba(34, 197, 94, 0.12);
-  color: var(--success);
+  background: var(--badge-identical-bg);
+  color: var(--badge-identical-color);
 }
 
 .badge.near {
-  background: rgba(250, 204, 21, 0.12);
-  color: var(--warning);
+  background: var(--badge-near-bg);
+  color: var(--badge-near-color);
 }
 
 .badge.partial {
-  background: rgba(249, 115, 22, 0.12);
-  color: var(--danger);
+  background: var(--badge-partial-bg);
+  color: var(--badge-partial-color);
 }
 
 .pill {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: rgba(56, 189, 248, 0.12);
+  background: var(--pill-bg);
   color: var(--primary);
   border-radius: 999px;
   padding: 3px 10px;
@@ -290,8 +439,8 @@ select {
   width: 100%;
   padding: 8px 10px;
   border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid var(--border-strong);
+  background: var(--input-bg);
   color: var(--text-100);
   font-size: 13px;
   transition: border 0.2s ease, background 0.2s ease;
@@ -300,8 +449,8 @@ select {
 input:focus,
 select:focus {
   outline: none;
-  border-color: rgba(56, 189, 248, 0.7);
-  background: rgba(15, 23, 42, 0.9);
+  border-color: var(--focus-border);
+  background: var(--input-bg-focus);
 }
 
 .checkbox-stack input[type="checkbox"] {
@@ -324,21 +473,21 @@ select:focus {
 }
 
 .button.primary {
-  background: linear-gradient(135deg, var(--primary), #60a5fa);
-  color: #0f172a;
-  box-shadow: 0 14px 30px -20px rgba(56, 189, 248, 0.9);
+  background: linear-gradient(135deg, var(--primary), var(--primary-bright));
+  color: var(--primary-contrast);
+  box-shadow: var(--primary-shadow);
 }
 
 .button.secondary {
-  background: rgba(15, 118, 110, 0.1);
+  background: var(--secondary-bg);
   color: var(--text-100);
-  border: 1px solid rgba(94, 234, 212, 0.2);
+  border: 1px solid var(--secondary-border);
 }
 
 .button.danger {
-  background: rgba(239, 68, 68, 0.16);
-  color: #fca5a5;
-  border: 1px solid rgba(248, 113, 113, 0.4);
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  border: 1px solid var(--danger-border);
 }
 
 .button:disabled {
@@ -349,7 +498,7 @@ select:focus {
 
 .button:not(:disabled):hover {
   transform: translateY(-1px);
-  box-shadow: 0 18px 34px -28px rgba(96, 165, 250, 0.9);
+  box-shadow: var(--button-hover-shadow);
 }
 
 .muted {
@@ -382,7 +531,7 @@ select:focus {
 .scroll-container {
   border-radius: 16px;
   overflow: hidden;
-  border: 1px solid rgba(148, 163, 184, 0.12);
+  border: 1px solid var(--border-soft);
 }
 
 .scroll-container table {
@@ -397,14 +546,14 @@ select:focus {
 .warning-item {
   padding: 12px 16px;
   border-radius: 12px;
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(248, 113, 113, 0.2);
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
 }
 
 .warning-item strong {
   display: block;
   margin-bottom: 4px;
-  color: #fca5a5;
+  color: var(--danger-text);
 }
 
 .duplicates-list {
@@ -421,8 +570,8 @@ select:focus {
   gap: 12px;
   padding: 8px 12px;
   border-radius: 10px;
-  background: rgba(15, 23, 42, 0.4);
-  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: var(--muted-surface);
+  border: 1px solid var(--border-soft);
 }
 
 .duplicate-row input {
@@ -437,7 +586,7 @@ select:focus {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.76);
+  background: var(--backdrop);
   backdrop-filter: blur(8px);
   display: flex;
   justify-content: center;
@@ -446,14 +595,14 @@ select:focus {
 }
 
 .modal-panel {
-  background: rgba(15, 23, 42, 0.95);
-  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: var(--modal-bg);
+  border: 1px solid var(--border-strong);
   border-radius: 18px;
   padding: 24px;
   width: min(820px, 90vw);
   max-height: 80vh;
   overflow-y: auto;
-  box-shadow: 0 24px 64px -32px rgba(15, 118, 110, 0.4);
+  box-shadow: var(--modal-shadow);
 }
 
 .modal-header {
@@ -470,8 +619,8 @@ select:focus {
 }
 
 .diff-list {
-  background: rgba(15, 23, 42, 0.4);
-  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: var(--muted-surface);
+  border: 1px solid var(--border-soft);
   border-radius: 12px;
   padding: 12px;
   display: flex;
@@ -505,8 +654,8 @@ select:focus {
 
 .tree-container {
   border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid var(--border-soft);
+  background: var(--muted-surface);
   max-height: 520px;
   overflow: auto;
 }
@@ -516,10 +665,10 @@ select:focus {
   align-items: center;
   gap: 12px;
   padding: 8px 12px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+  border-bottom: 1px solid var(--border-faint);
 }
 .tree-row.selected {
-  background: rgba(56, 189, 248, 0.08);
+  background: var(--table-selected-bg);
 }
 .tree-toggle {
   border: none;
@@ -587,8 +736,8 @@ select:focus {
 
 .groups-table-shell {
   border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid var(--border-medium);
+  background: var(--panel-strong-bg);
   height: 520px;
   overflow: auto;
 }
@@ -598,7 +747,7 @@ select:focus {
   cursor: col-resize;
   margin: 0 8px;
   border-radius: 999px;
-  background: radial-gradient(circle at center, rgba(148, 163, 184, 0.4), transparent);
+  background: var(--handle-gradient);
 }
 
 .comparison-panel {
@@ -606,8 +755,8 @@ select:focus {
   flex-direction: column;
   gap: 12px;
   border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-medium);
+  background: var(--panel-contrast-bg);
   padding: 14px;
   overflow: hidden;
   min-width: 260px;
@@ -623,19 +772,19 @@ select:focus {
 }
 .tree-duplicates {
   padding: 8px 0 12px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+  border-bottom: 1px solid var(--border-faint);
 }
 .tree-selection-panel {
   margin-top: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
+  border: 1px solid var(--border-soft);
   border-radius: 12px;
   padding: 16px;
-  background: rgba(15, 23, 42, 0.5);
+  background: var(--panel-muted-bg);
 }
 .branch-section {
   margin-top: 16px;
   padding-top: 12px;
-  border-top: 1px solid rgba(148, 163, 184, 0.12);
+  border-top: 1px solid var(--border-soft);
 }
 .branch-header {
   display: flex;
@@ -649,10 +798,10 @@ select:focus {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 .subtree-card {
-  border: 1px solid rgba(148, 163, 184, 0.12);
+  border: 1px solid var(--border-soft);
   border-radius: 12px;
   padding: 12px;
-  background: rgba(15, 23, 42, 0.4);
+  background: var(--muted-surface);
 }
 .subtree-title {
   font-weight: 600;
@@ -690,10 +839,10 @@ select:focus {
 }
 
 .comparison-card {
-  border: 1px solid rgba(148, 163, 184, 0.12);
+  border: 1px solid var(--border-soft);
   border-radius: 10px;
   padding: 10px 12px;
-  background: rgba(15, 23, 42, 0.4);
+  background: var(--muted-surface);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -703,7 +852,7 @@ select:focus {
 }
 
 .comparison-card.canonical {
-  border-color: rgba(56, 189, 248, 0.4);
+  border-color: var(--accent-border);
 }
 
 .comparison-card-title {
@@ -730,7 +879,7 @@ select:focus {
 .diff-column {
   border-radius: 10px;
   padding: 8px 10px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
+  border: 1px solid var(--border-soft);
 }
 
 .diff-column-title {
@@ -786,8 +935,8 @@ select:focus {
   gap: 12px;
   padding: 4px 8px;
   border-radius: 6px;
-  background: rgba(15, 23, 42, 0.4);
-  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: var(--muted-surface);
+  border: 1px solid var(--border-soft);
 }
 
 .entry-row span:first-child {
@@ -827,8 +976,8 @@ select:focus {
   gap: 12px;
   padding: 12px;
   border-radius: 12px;
-  background: rgba(15, 23, 42, 0.45);
-  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: var(--muted-strong-surface);
+  border: 1px solid var(--border-soft);
 }
 
 .matrix-swatch {
@@ -869,9 +1018,9 @@ select:focus {
 
 .treemap-bar {
   position: relative;
-  background: rgba(15, 23, 42, 0.45);
+  background: var(--muted-strong-surface);
   border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
+  border: 1px solid var(--border-muted);
   overflow: hidden;
 }
 
@@ -880,7 +1029,7 @@ select:focus {
   top: 0;
   bottom: 0;
   left: 0;
-  background: linear-gradient(90deg, rgba(59, 130, 246, 0.6), rgba(56, 189, 248, 0.3));
+  background: var(--treemap-gradient);
 }
 
 .treemap-label {
@@ -902,7 +1051,7 @@ select:focus {
 .drawer {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.6);
+  background: var(--drawer-backdrop);
   backdrop-filter: blur(6px);
   display: flex;
   justify-content: flex-end;
@@ -911,8 +1060,8 @@ select:focus {
 
 .drawer-panel {
   width: min(420px, 90vw);
-  background: rgba(15, 23, 42, 0.95);
-  border-left: 1px solid rgba(148, 163, 184, 0.2);
+  background: var(--drawer-bg);
+  border-left: 1px solid var(--border-medium);
   padding: 24px;
   display: flex;
   flex-direction: column;
@@ -972,10 +1121,10 @@ select:focus {
 }
 
 .log-entry {
-  border: 1px solid rgba(148, 163, 184, 0.12);
+  border: 1px solid var(--border-soft);
   border-radius: 10px;
   padding: 10px 12px;
-  background: rgba(15, 23, 42, 0.5);
+  background: var(--panel-muted-bg);
   font-size: 13px;
 }
 
@@ -1000,15 +1149,15 @@ select:focus {
   position: relative;
   height: 12px;
   border-radius: 999px;
-  background: rgba(15, 23, 42, 0.5);
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: var(--progress-track);
+  border: 1px solid var(--border-medium);
   overflow: hidden;
 }
 
 .progress-bar-fill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--primary), #60a5fa);
+  background: linear-gradient(90deg, var(--primary), var(--primary-bright));
   transition: width 0.3s ease;
 }
 
@@ -1027,7 +1176,7 @@ select:focus {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  border: 2px solid rgba(148, 163, 184, 0.4);
+  border: 2px solid var(--spinner-track);
   border-top-color: var(--primary);
   animation: spinner-rotate 0.6s linear infinite;
 }

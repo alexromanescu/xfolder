@@ -18,9 +18,10 @@ export function SimilarityMatrixView({ entries, loading }: Props) {
       {entries.map((entry) => {
         const key = `${entry.group_id}-${entry.left.relative_path}-${entry.right.relative_path}`;
         const intensity = Math.round(entry.similarity * 100);
+        const gradient = `linear-gradient(90deg, var(--primary-soft) ${intensity}%, var(--muted-surface) ${intensity}%)`;
         return (
           <div key={key} className="matrix-entry">
-            <div className="matrix-swatch" style={{ background: `linear-gradient(90deg, rgba(56,189,248,0.4) ${intensity}%, rgba(15,23,42,0.4) ${intensity}%)` }} />
+            <div className="matrix-swatch" style={{ background: gradient }} />
             <div className="matrix-content">
               <div className="matrix-paths">
                 <strong>{entry.left.relative_path}</strong>
